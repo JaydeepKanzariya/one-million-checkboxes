@@ -117,9 +117,13 @@ export class Broadcaster {
 
     const frame = encodeBatch(fromSeq, items);
     for (const ws of this.sockets.values()) {
-      if (ws.readyState === 1 && ws.bufferedAmount < 1_048_576) {
-        ws.send(frame, { binary: true });
+      if (ws.readyState !== 1) continue;
+      if (ws.bufferedAmount >= 1_048_576) {
+        logger.warn({ socketId: ws.id, bufferedAmount: ws.bufferedAmount }, 'terminating slow ws client');
+        ws.terminate();
+        continue;
       }
+      ws.send(frame, { binary: true });
     }
   }
 

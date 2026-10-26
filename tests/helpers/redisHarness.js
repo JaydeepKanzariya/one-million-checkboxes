@@ -39,8 +39,20 @@ export async function setupTestRedis() {
   return {
     mode: 'real',
     async flush() {
-      const keys = await redis.keys(`${config.redisPrefix}:*`);
-      if (keys.length > 0) await redis.del(...keys);
+      let cursor = '0';
+      do {
+        const [nextCursor, found] = await redis.scan(
+          cursor,
+          'MATCH',
+          `${config.redisPrefix}:*`,
+          'COUNT',
+          500,
+        );
+        cursor = nextCursor;
+        if (found.length > 0) {
+          await redis.del(...found);
+        }
+      } while (cursor !== '0');
     },
     async teardown() {
       await closeRedis();

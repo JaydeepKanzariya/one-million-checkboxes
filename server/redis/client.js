@@ -11,6 +11,7 @@ const scriptsDir = path.join(__dirname, 'scripts');
 const toggleScript = fs.readFileSync(path.join(scriptsDir, 'toggle.lua'), 'utf8');
 const httpLimitScript = fs.readFileSync(path.join(scriptsDir, 'http_limit.lua'), 'utf8');
 const wsLimitScript = fs.readFileSync(path.join(scriptsDir, 'ws_limit.lua'), 'utf8');
+const strikeScript = fs.readFileSync(path.join(scriptsDir, 'strike.lua'), 'utf8');
 
 // Normalize localhost -> 127.0.0.1 on Windows so Node v24 doesn't fail on IPv6 ::1
 export const normalizedRedisUrl = config.redisUrl.replace('://localhost:', '://127.0.0.1:');
@@ -52,6 +53,11 @@ redis.defineCommand('httpLimitLua', {
 redis.defineCommand('wsLimitLua', {
   numberOfKeys: 4,
   lua: wsLimitScript,
+});
+
+redis.defineCommand('strikeLua', {
+  numberOfKeys: 3,
+  lua: strikeScript,
 });
 
 export async function connectRedis() {

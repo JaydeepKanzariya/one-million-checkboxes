@@ -51,29 +51,27 @@ export async function checkWsUserLimit(userId, nowMs = Date.now()) {
 }
 
 export async function recordUserStrike(userId) {
-  if (!userId) return { blocked: false, blocks: 0, retryAfterMs: 0 };
-  const strikesKey = keys.rlStrikes(userId);
-  const blockKey = keys.rlBlock(userId);
-  const blockCountKey = keys.rlBlockCount(userId);
+  if (!userId) return { blocked: false, strikes: 0, blocks: 0, retryAfterMs: 0, shouldClose: false };
 
-  const strikes = await redis.incr(strikesKey);
-  if (strikes === 1) {
-    await redis.expire(strikesKey, config.rl.wsStrikeWindowS);
-  }
+  const [blockedRaw, strikesRaw, blocksRaw, retryAfterMsRaw] = await redis.strikeLua(
+    keys.rlStrikes(userId),
+    keys.rlBlock(userId),
+    keys.rlBlockCount(userId),
+    config.rl.wsStrikesToBlock,
+    config.rl.wsStrikeWindowS,
+    config.rl.wsBlockSeconds,
+  );
 
-  if (strikes >= config.rl.wsStrikesToBlock) {
-    await redis.set(blockKey, '1', 'EX', config.rl.wsBlockSeconds);
-    await redis.del(strikesKey);
-    const blocks = await redis.incr(blockCountKey);
-    await redis.expire(blockCountKey, config.rl.wsBlockSeconds * 10);
-    return {
-      blocked: true,
-      blocks,
-      retryAfterMs: config.rl.wsBlockSeconds * 1000,
-      shouldClose: blocks >= config.rl.wsBlocksToClose,
-    };
-  }
+  const blocked = Number(blockedRaw) === 1;
+  const strikes = Number(strikesRaw);
+  const blocks = Number(blocksRaw);
+  const retryAfterMs = Number(retryAfterMsRaw);
 
-  return { blocked: false, strikes, blocks: 0, retryAfterMs: 1000, shouldClose: false };
+  return {
+    blocked,
+    strikes,
+    blocks,
+    retryAfterMs,
+    shouldClose: blocked && blocks >= config.rl.wsBlocksToClose,
+  };
 }
-

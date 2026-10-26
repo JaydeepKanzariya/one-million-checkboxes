@@ -113,18 +113,21 @@ async function handleSetFrame(ws, index, value) {
     return;
   }
 
-  // 2. Per-socket in-memory token bucket
+  // 2. Per-socket in-memory token bucket (at most one strike per socket per second)
   const bucketRes = ws.bucket.consume(1, now);
   if (!bucketRes.allowed) {
-    const strikeRes = await recordUserStrike(userId);
-    if (strikeRes.blocked) {
-      ws.blockedUntil = Date.now() + strikeRes.retryAfterMs;
-      sendBinary(ws, encodeReject(index, REJECT_CODE.BLOCKED));
-      sendJson(ws, { t: 'limit', reason: 'blocked', retryAfterMs: strikeRes.retryAfterMs });
-      if (strikeRes.shouldClose) {
-        ws.close(1008, 'Repeated rate limit blocks');
+    if (now - (ws.lastBucketStrikeMs || 0) >= 1000) {
+      ws.lastBucketStrikeMs = now;
+      const strikeRes = await recordUserStrike(userId);
+      if (strikeRes.blocked) {
+        ws.blockedUntil = Date.now() + strikeRes.retryAfterMs;
+        sendBinary(ws, encodeReject(index, REJECT_CODE.BLOCKED));
+        sendJson(ws, { t: 'limit', reason: 'blocked', retryAfterMs: strikeRes.retryAfterMs });
+        if (strikeRes.shouldClose) {
+          ws.close(1008, 'Repeated rate limit blocks');
+        }
+        return;
       }
-      return;
     }
     sendBinary(ws, encodeReject(index, REJECT_CODE.RATE));
     sendJson(ws, { t: 'limit', reason: 'rate', retryAfterMs: bucketRes.retryAfterMs });

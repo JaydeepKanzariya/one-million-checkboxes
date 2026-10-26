@@ -4,7 +4,6 @@ export class RealtimeSocket {
   constructor(handlers) {
     this.handlers = handlers;
     this.ws = null;
-    this.lastSeq = 0;
     this.reconnectAttempts = 0;
     this.reconnectTimer = null;
     this.pingTimer = null;
@@ -30,8 +29,9 @@ export class RealtimeSocket {
       this.hasConnectedOnce = true;
       this.reconnectAttempts = 0;
 
-      if (this.lastSeq > 0) {
-        ws.send(encodeJson({ t: 'hello', lastSeq: this.lastSeq }));
+      const lastSeq = Number(this.handlers.getLastSeq?.() || 0);
+      if (lastSeq > 0) {
+        ws.send(encodeJson({ t: 'hello', lastSeq }));
       }
 
       this.startHeartbeat();
@@ -42,20 +42,13 @@ export class RealtimeSocket {
       try {
         const frame = decodeServerFrame(event.data);
         if (frame.type === 'ack') {
-          if (frame.seq > this.lastSeq) this.lastSeq = frame.seq;
           this.handlers.onAck?.(frame);
         } else if (frame.type === 'batch') {
-          const endSeq = frame.fromSeq + frame.items.length - 1;
-          if (endSeq > this.lastSeq) this.lastSeq = endSeq;
           this.handlers.onBatch?.(frame);
         } else if (frame.type === 'reject') {
           this.handlers.onReject?.(frame);
         } else if (frame.type === 'json') {
-          const msg = frame.message;
-          if (typeof msg.seq === 'number' && msg.seq > this.lastSeq) {
-            this.lastSeq = msg.seq;
-          }
-          this.handlers.onJson?.(msg);
+          this.handlers.onJson?.(frame.message);
         }
       } catch (err) {
         console.error('Failed to decode frame', err);
@@ -81,12 +74,6 @@ export class RealtimeSocket {
     }
     this.ws.send(encodeSet(index, value));
     return true;
-  }
-
-  setLastSeq(seq) {
-    if (seq > this.lastSeq) {
-      this.lastSeq = seq;
-    }
   }
 
   startHeartbeat() {
@@ -132,4 +119,3 @@ export class RealtimeSocket {
     }
   }
 }
-

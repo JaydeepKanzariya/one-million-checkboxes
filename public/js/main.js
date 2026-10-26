@@ -4,18 +4,20 @@ import { attachBoardInput } from './input.js';
 import { Minimap } from './minimap.js';
 import { REJECT_CODE } from './protocol.js';
 import { BoardRenderer } from './renderer.js';
+import { Sequencer } from './sequencer.js';
 import { RealtimeSocket } from './socket.js';
 import { UIController, formatNum } from './ui.js';
 
+// serverBits holds authoritative server state; bitset holds displayed state (serverBits + optimistic overlay)
+const serverBits = new BitSet(1_000_000);
 const bitset = new BitSet(1_000_000);
 const canvas = document.getElementById('boardCanvas');
 const minimapCanvas = document.getElementById('minimapCanvas');
 
-// Optimistic toggle tracking: Map<index, previousValue>
+// Optimistic overlay: Map<index, { desired: 0|1, inFlight: number, lastAckSeq: number }>
 const pendingToggles = new Map();
 
 let snapshotLoaded = false;
-let snapshotSeq = 0;
 const preSnapshotBuffer = []; // buffered { seq, index, value } while snapshot is loading
 
 let minimap = null;
@@ -46,44 +48,79 @@ const renderer = new BoardRenderer(canvas, bitset, {
 
 minimap = new Minimap(minimapCanvas, bitset, renderer);
 
-function applyRemoteUpdate(seq, index, value) {
-  if (!snapshotLoaded) {
-    preSnapshotBuffer.push({ seq, index, value });
-    return;
-  }
-  if (seq > 0 && seq <= snapshotSeq) {
-    return;
-  }
-  // If user has an unacknowledged optimistic toggle on this exact cell, keep track
-  const changed = bitset.set(index, value);
-  if (changed) {
-    renderer.markCellUpdated(index, 'live');
-    ui.setCheckedCount(bitset.checkedCount);
-    minimap.markDirty();
+function reconcilePendingAfterSeqAdvance() {
+  for (const [idx, entry] of pendingToggles.entries()) {
+    if (entry.inFlight === 0 && sequencer.appliedSeq >= entry.lastAckSeq) {
+      pendingToggles.delete(idx);
+      const truth = serverBits.get(idx);
+      if (bitset.set(idx, truth)) {
+        renderer.markCellUpdated(idx, null);
+        ui.setCheckedCount(bitset.checkedCount);
+        minimap.markDirty();
+      }
+    }
   }
 }
+
+const sequencer = new Sequencer({
+  apply(index, value) {
+    serverBits.set(index, value);
+    const pending = pendingToggles.get(index);
+    if (pending) {
+      if (pending.inFlight === 0 && sequencer.appliedSeq >= pending.lastAckSeq) {
+        pendingToggles.delete(index);
+        const changed = bitset.set(index, value);
+        if (changed) {
+          renderer.markCellUpdated(index, 'live');
+          ui.setCheckedCount(bitset.checkedCount);
+          minimap.markDirty();
+        }
+      } else {
+        bitset.set(index, pending.desired);
+      }
+    } else {
+      const changed = bitset.set(index, value);
+      if (changed) {
+        renderer.markCellUpdated(index, 'live');
+        ui.setCheckedCount(bitset.checkedCount);
+        minimap.markDirty();
+      }
+    }
+    reconcilePendingAfterSeqAdvance();
+  },
+  onGapTimeout() {
+    loadSnapshot();
+  },
+});
 
 async function loadSnapshot() {
   try {
     snapshotLoaded = false;
     const snap = await fetchBoardSnapshot();
-    snapshotSeq = snap.seq;
+    serverBits.loadSnapshot(snap.bytes);
     bitset.loadSnapshot(snap.bytes);
 
     if (snap.instanceId) {
       ui.setInstanceId(snap.instanceId);
     }
 
-    // Apply any buffered WebSocket updates that occurred after snapshotSeq
-    for (const item of preSnapshotBuffer) {
-      if (item.seq > snapshotSeq) {
-        bitset.set(item.index, item.value);
-      }
-    }
-    preSnapshotBuffer.length = 0;
+    sequencer.reset(snap.seq);
     snapshotLoaded = true;
 
-    socket.setLastSeq(snapshotSeq);
+    for (const item of preSnapshotBuffer) {
+      sequencer.push(item.seq, item.index, item.value);
+    }
+    preSnapshotBuffer.length = 0;
+
+    // Re-apply any still in-flight optimistic toggles on top of the snapshot
+    for (const [idx, entry] of pendingToggles.entries()) {
+      if (entry.inFlight > 0) {
+        bitset.set(idx, entry.desired);
+      } else if (sequencer.appliedSeq >= entry.lastAckSeq) {
+        pendingToggles.delete(idx);
+      }
+    }
+
     ui.setCheckedCount(bitset.checkedCount);
     renderer.markSnapshotLoaded();
     minimap.forceRebuild();
@@ -99,6 +136,10 @@ async function loadSnapshot() {
 }
 
 const socket = new RealtimeSocket({
+  getLastSeq() {
+    return sequencer.appliedSeq;
+  },
+
   onOpen({ wasReconnect }) {
     ui.setConnectionState('online');
     if (wasReconnect) {
@@ -111,33 +152,48 @@ const socket = new RealtimeSocket({
     ui.showToast('Connection lost. Reconnecting…', { alert: true, durationMs: 4000 });
   },
 
-  onAck({ index, value, seq }) {
-    pendingToggles.delete(index);
-    const changed = bitset.set(index, value);
-    if (changed) {
-      renderer.markCellUpdated(index, 'own');
-      ui.setCheckedCount(bitset.checkedCount);
-      minimap.markDirty();
+  onAck({ index, seq }) {
+    const entry = pendingToggles.get(index);
+    if (!entry) return;
+    entry.inFlight = Math.max(0, entry.inFlight - 1);
+    if (seq > entry.lastAckSeq) {
+      entry.lastAckSeq = seq;
     }
-    if (seq > snapshotSeq) snapshotSeq = seq;
+    if (entry.inFlight === 0 && sequencer.appliedSeq >= entry.lastAckSeq) {
+      pendingToggles.delete(index);
+      const truth = serverBits.get(index);
+      if (bitset.set(index, truth)) {
+        renderer.markCellUpdated(index, null);
+        ui.setCheckedCount(bitset.checkedCount);
+        minimap.markDirty();
+      }
+    }
   },
 
   onBatch({ fromSeq, items }) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const seq = fromSeq + i;
-      applyRemoteUpdate(seq, item.index, item.value);
+      if (!snapshotLoaded) {
+        preSnapshotBuffer.push({ seq, index: item.index, value: item.value });
+      } else {
+        sequencer.push(seq, item.index, item.value);
+      }
     }
   },
 
   onReject({ index, code }) {
-    if (pendingToggles.has(index)) {
-      const prev = pendingToggles.get(index);
-      pendingToggles.delete(index);
-      bitset.set(index, prev);
-      renderer.markCellUpdated(index, null);
-      ui.setCheckedCount(bitset.checkedCount);
-      minimap.markDirty();
+    const entry = pendingToggles.get(index);
+    if (entry) {
+      entry.inFlight = Math.max(0, entry.inFlight - 1);
+      if (entry.inFlight === 0) {
+        pendingToggles.delete(index);
+        const truth = serverBits.get(index);
+        bitset.set(index, truth);
+        renderer.markCellUpdated(index, null);
+        ui.setCheckedCount(bitset.checkedCount);
+        minimap.markDirty();
+      }
     }
 
     if (code === REJECT_CODE.AUTH) {
@@ -146,10 +202,6 @@ const socket = new RealtimeSocket({
         actionLabel: 'Sign in',
         onAction: () => ui.openSignInFlow(),
       });
-    } else if (code === REJECT_CODE.RATE) {
-      ui.showToast('Slow down — you can check more boxes in 1s.', { alert: true });
-    } else if (code === REJECT_CODE.BLOCKED) {
-      ui.showToast('Paused for 2 minutes after too many rapid clicks.', { alert: true });
     } else if (code === REJECT_CODE.RANGE) {
       ui.showToast('Checkbox index is out of range.', { alert: true });
     }
@@ -159,7 +211,7 @@ const socket = new RealtimeSocket({
     if (msg.t === 'welcome') {
       if (msg.instanceId) ui.setInstanceId(msg.instanceId);
       if (typeof msg.online === 'number') ui.setOnlineCount(msg.online);
-      if (typeof msg.checked === 'number' && snapshotLoaded) {
+      if (typeof msg.checked === 'number' && snapshotLoaded && pendingToggles.size === 0) {
         ui.setCheckedCount(msg.checked);
       }
       if (msg.user) {
@@ -210,9 +262,14 @@ function handleToggleCell(index) {
   const current = bitset.get(index);
   const desired = current ? 0 : 1;
 
-  if (!pendingToggles.has(index)) {
-    pendingToggles.set(index, current);
-  }
+  const entry = pendingToggles.get(index) || {
+    desired,
+    inFlight: 0,
+    lastAckSeq: sequencer.appliedSeq,
+  };
+  entry.desired = desired;
+  entry.inFlight += 1;
+  pendingToggles.set(index, entry);
 
   // Optimistic flip
   bitset.set(index, desired);
@@ -222,9 +279,11 @@ function handleToggleCell(index) {
 
   const sent = socket.sendSet(index, desired);
   if (!sent) {
-    const prev = pendingToggles.get(index);
-    pendingToggles.delete(index);
-    bitset.set(index, prev);
+    entry.inFlight = Math.max(0, entry.inFlight - 1);
+    if (entry.inFlight === 0) {
+      pendingToggles.delete(index);
+      bitset.set(index, serverBits.get(index));
+    }
     renderer.markCellUpdated(index, null);
     ui.setCheckedCount(bitset.checkedCount);
     ui.showToast('Connection lost. Reconnecting…', { alert: true });
@@ -287,7 +346,6 @@ async function boot() {
     }
   });
 
-  // Connect WebSocket and fetch initial state in parallel
   socket.connect();
 
   const [meResult] = await Promise.allSettled([fetchMe(), loadSnapshot()]);
@@ -297,4 +355,3 @@ async function boot() {
 }
 
 boot();
-

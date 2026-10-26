@@ -2,6 +2,9 @@ import { DUR, prefersReducedMotion } from './motion.js';
 
 const numFmt = new Intl.NumberFormat('en-US');
 
+const ACTIVITY_MIN_GAP_MS = 1200;
+const ACTIVITY_VISIBLE_MS = 8000;
+
 export function formatNum(n) {
   return numFmt.format(Number(n) || 0);
 }
@@ -43,6 +46,8 @@ export class UIController {
     this.mobileThemeBtnEl = document.getElementById('mobileThemeBtn');
 
     this.findActivityBtnEl = document.getElementById('findActivityBtn');
+    this.activityLineEl = document.getElementById('activityLine');
+    this.activityTextEl = document.getElementById('activityText');
 
     this.minimapCardEl = document.getElementById('minimapCard');
     this.minimapPanelEl = document.getElementById('minimapPanel');
@@ -70,6 +75,13 @@ export class UIController {
     this.tallyMarks = [];
     this.tallyLabelEl = null;
     this.hintDismissed = false;
+
+    // Activity line: show at most one remote change per ACTIVITY_MIN_GAP_MS so it stays readable.
+    this.activityIndex = -1;
+    this.activityShownAt = 0;
+    this.activityPending = null;
+    this.activityTimer = null;
+    this.activityHideTimer = null;
 
     this.authState = {
       authenticated: false,
@@ -103,13 +115,56 @@ export class UIController {
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const isDark = currentAttr ? currentAttr === 'dark' : systemDark;
     const next = isDark ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
     try {
       localStorage.setItem('omc_theme', next);
     } catch {
       // Ignore storage access errors
     }
-    this.onThemeChange?.();
+
+    const apply = () => {
+      document.documentElement.setAttribute('data-theme', next);
+      // The canvas must repaint inside the transition callback, or the new snapshot shows old colors.
+      this.onThemeChange?.({ immediate: true });
+    };
+
+    if (typeof document.startViewTransition === 'function' && !prefersReducedMotion()) {
+      document.startViewTransition(apply);
+    } else {
+      apply();
+    }
+  }
+
+  // Latest box someone else changed, shown in the footer. Clicking it jumps there.
+  showActivity(index, value) {
+    if (!this.activityLineEl) return;
+    const now = Date.now();
+    const wait = ACTIVITY_MIN_GAP_MS - (now - this.activityShownAt);
+    if (wait > 0) {
+      this.activityPending = { index, value };
+      if (!this.activityTimer) {
+        this.activityTimer = setTimeout(() => {
+          this.activityTimer = null;
+          const next = this.activityPending;
+          this.activityPending = null;
+          if (next) this.showActivity(next.index, next.value);
+        }, wait);
+      }
+      return;
+    }
+
+    this.activityIndex = index;
+    this.activityShownAt = now;
+    this.activityTextEl.textContent = `Box ${formatNum(index)} just ${value ? 'checked' : 'unchecked'}`;
+    this.activityLineEl.setAttribute('aria-label', `Go to box ${formatNum(index)}`);
+    this.activityLineEl.hidden = false;
+    this.activityLineEl.classList.remove('fresh');
+    void this.activityLineEl.offsetWidth; // restart the entrance animation
+    this.activityLineEl.classList.add('fresh');
+
+    clearTimeout(this.activityHideTimer);
+    this.activityHideTimer = setTimeout(() => {
+      if (this.activityLineEl) this.activityLineEl.hidden = true;
+    }, ACTIVITY_VISIBLE_MS);
   }
 
   initMinimapCollapse() {
@@ -309,6 +364,10 @@ export class UIController {
 
     this.hintCloseBtnEl?.addEventListener('click', () => {
       this.dismissHint();
+    });
+
+    this.activityLineEl?.addEventListener('click', () => {
+      if (this.activityIndex >= 0) this.onJumpTo?.(this.activityIndex);
     });
 
     const cancelBtn = document.getElementById('devCancelBtn');

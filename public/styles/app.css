@@ -820,15 +820,329 @@ body {
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Polish: depth, radius, icons, press feedback and entrances.
+   Surfaces are paper resting on the desk: a hairline edge, a soft layered
+   shadow and a faint top highlight. Everything that appears springs in once;
+   nothing loops.
+   --------------------------------------------------------------------------- */
+
+.icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.topbar {
+  position: relative;
+  z-index: 10;
+  box-shadow: var(--shadow-1);
+}
+
+.zoom-toolbar,
+.minimap-panel,
+.minimap-pill-btn,
+.goto-popover,
+.hint-card,
+.mobile-sheet {
+  border-color: var(--edge);
+  box-shadow: var(--highlight), var(--shadow-2);
+}
+
+.zoom-toolbar,
+.minimap-panel,
+.goto-popover,
+.hint-card {
+  border-radius: var(--radius-md);
+}
+
+.mobile-sheet {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--highlight), var(--shadow-3);
+}
+
+.dev-dialog {
+  border-color: var(--edge);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--highlight), var(--shadow-3);
+}
+
+.dev-dialog::backdrop {
+  background: rgba(10, 17, 14, 0.36);
+}
+
+.toast {
+  border-radius: 999px;
+  padding: 8px 16px;
+  border-color: transparent;
+  box-shadow: var(--shadow-3);
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--rule-strong);
+}
+
+.btn-with-icon {
+  padding-left: 10px;
+}
+
+/* Press feedback: every button sinks slightly while held. */
+.btn {
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.btn-primary {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.btn-subtle,
+.btn-icon {
+  box-shadow: 0 1px 0 var(--edge);
+}
+
+.minimap-collapse {
+  display: inline-flex;
+  border-radius: var(--radius-sm);
+}
+
+.minimap-collapse:hover {
+  background: var(--paper-subtle);
+}
+
+#minimapCanvas {
+  border-radius: var(--radius-sm);
+}
+
+/* First-visit card: a two-line welcome with a clear way to dismiss it. */
+.hint-card {
+  gap: 16px;
+  padding: 12px 12px 12px 16px;
+}
+
+.hint-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hint-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.hint-text {
+  color: var(--ink-muted);
+}
+
+.hint-card .hint-close {
+  border: 1px solid transparent;
+  background: var(--ink);
+  color: var(--ink-on-fill);
+  font-size: 12px;
+  padding: 0 12px;
+}
+
+/* Activity line: the latest box someone else checked; click to go there. */
+.statusbar {
+  position: relative;
+}
+
+.activity-line {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 40%;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.activity-line:hover {
+  background: var(--paper-subtle);
+  color: var(--ink);
+}
+
+.activity-line:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.activity-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--live);
+}
+
+.activity-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-line.fresh .activity-text {
+  animation: omc-activity-in var(--dur-base) var(--ease-out);
+}
+
+.activity-line.fresh .activity-dot {
+  animation: omc-activity-dot 700ms var(--ease-out);
+}
+
+@media (max-width: 900px) {
+  .activity-line {
+    display: none;
+  }
+}
+
+/* Entrances */
+.goto-popover:not([hidden]) {
+  transform-origin: top right;
+  animation: omc-pop-in var(--dur-base) var(--ease-spring);
+}
+
+.mobile-sheet:not([hidden]) {
+  transform-origin: top center;
+  animation: omc-pop-in var(--dur-base) var(--ease-spring);
+}
+
+.minimap-panel {
+  transform-origin: bottom right;
+}
+
+.minimap-card:not(.collapsed) .minimap-panel {
+  animation: omc-pop-in var(--dur-base) var(--ease-spring);
+}
+
+.toast {
+  animation: omc-rise-in var(--dur-base) var(--ease-spring);
+}
+
+.hint-card:not([hidden]) {
+  animation: omc-rise-in-centered 420ms var(--ease-spring) 900ms both;
+}
+
+.dev-dialog[open] {
+  animation: omc-pop-in var(--dur-base) var(--ease-spring);
+}
+
+@keyframes omc-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes omc-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes omc-rise-in-centered {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes omc-activity-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes omc-activity-dot {
+  0% {
+    box-shadow: 0 0 0 0 var(--live);
+  }
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+/* Theme switch cross-fade (View Transitions, Chromium; others switch instantly). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 280ms;
+  animation-timing-function: var(--ease-in-out);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .checked-count,
   .progress-fill,
   .btn,
-  .tally-mark {
+  .tally-mark,
+  .activity-line {
     transition: none !important;
   }
 
-  .tally-cluster.shaking {
+  .tally-cluster.shaking,
+  .goto-popover,
+  .mobile-sheet,
+  .minimap-panel,
+  .toast,
+  .hint-card,
+  .dev-dialog,
+  .activity-line .activity-text,
+  .activity-line .activity-dot {
+    animation: none !important;
+  }
+
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
     animation: none !important;
   }
 }

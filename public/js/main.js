@@ -96,8 +96,8 @@ function findActivity() {
 
 const ui = new UIController({
   budget,
-  onThemeChange() {
-    renderer.refreshTheme();
+  onThemeChange({ immediate = false } = {}) {
+    renderer.refreshTheme({ immediate });
     minimap?.forceRebuild();
   },
   async onLogout() {
@@ -166,6 +166,7 @@ const sequencer = new Sequencer({
         ui.setCheckedCount(bitset.checkedCount);
         minimap.markDirty();
         recordRemoteUpdate(index);
+        ui.showActivity(index, value);
       }
     }
     reconcilePendingAfterSeqAdvance();

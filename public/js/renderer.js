@@ -10,6 +10,11 @@ const DESK_PAD_PX = 20;
 const LIVE_PULSE_MS = 800;
 const OWN_PULSE_MS = 500;
 
+// Own-click press: share of the pulse spent dipping before springing back.
+const PRESS_DOWN = 0.3;
+// The check mark's short stroke is ~0.28 of the box and the long one ~0.56, so it is ~1/3 of the path.
+const CHECK_SHORT_STROKE = 0.335;
+
 function parseHexRgb(hex) {
   const clean = hex.trim().replace('#', '');
   const n = parseInt(clean, 16);
@@ -116,10 +121,18 @@ export class BoardRenderer {
     };
   }
 
-  refreshTheme() {
+  refreshTheme({ immediate = false } = {}) {
     this.palette = this.readThemePalette();
     this.overviewDirty = true;
     this.requestFullRedraw();
+    if (immediate) {
+      // Paint now instead of next frame, so a theme cross-fade captures the new colors.
+      if (this.rafId !== null) {
+        cancelAnimationFrame(this.rafId);
+        this.rafId = null;
+      }
+      this.render(performance.now());
+    }
   }
 
   resize() {
@@ -710,6 +723,7 @@ export class BoardRenderer {
     }
 
     let fillColor = checked ? this.palette.ink : null;
+    let ownT = -1; // progress of your own click's press animation, or -1
     const pulse = this.pulses.get(idx);
     if (pulse) {
       const duration = pulse.kind === 'own' ? OWN_PULSE_MS : LIVE_PULSE_MS;
@@ -720,6 +734,7 @@ export class BoardRenderer {
         const startRgb = pulse.kind === 'own' ? this.palette.signalRgb : this.palette.liveRgb;
         const endRgb = checked ? this.palette.inkRgb : this.palette.paperRgb;
         fillColor = lerpColor(startRgb, endRgb, t);
+        if (pulse.kind === 'own') ownT = t;
       }
     }
 
@@ -737,9 +752,12 @@ export class BoardRenderer {
     } else {
       // D3: Inset box is 62% of the cell: pad = Math.round(cs * 0.19)
       const pad = Math.round(cs * 0.19);
-      const boxX = x + pad;
-      const boxY = y + pad;
-      const boxS = Math.max(4, Math.round(cs) - pad * 2);
+      const baseS = Math.max(4, Math.round(cs) - pad * 2);
+      // Your own click: the box dips to 88% then springs back, like a key press.
+      const press = ownT < 0 ? 1 : ownT < PRESS_DOWN ? 1 - 0.12 * (ownT / PRESS_DOWN) : 0.88 + 0.12 * easeOut((ownT - PRESS_DOWN) / (1 - PRESS_DOWN));
+      const boxS = Math.max(4, Math.round(baseS * press));
+      const boxX = x + pad + (baseS - boxS) / 2;
+      const boxY = y + pad + (baseS - boxS) / 2;
       const radius = Math.min(3, cs * 0.12);
 
       if (fillColor) {
@@ -762,10 +780,22 @@ export class BoardRenderer {
         ctx.lineWidth = Math.max(1.5, cs * 0.085);
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
+        // Your own check mark draws itself in, short stroke first, over the first 60% of the pulse.
+        const drawn = ownT < 0 ? 1 : easeOut(Math.min(1, ownT / 0.6));
+        const p0x = boxX + boxS * 0.23, p0y = boxY + boxS * 0.52;
+        const p1x = boxX + boxS * 0.43, p1y = boxY + boxS * 0.72;
+        const p2x = boxX + boxS * 0.78, p2y = boxY + boxS * 0.28;
+        const split = CHECK_SHORT_STROKE; // share of the total path length taken by the short stroke
         ctx.beginPath();
-        ctx.moveTo(boxX + boxS * 0.23, boxY + boxS * 0.52);
-        ctx.lineTo(boxX + boxS * 0.43, boxY + boxS * 0.72);
-        ctx.lineTo(boxX + boxS * 0.78, boxY + boxS * 0.28);
+        ctx.moveTo(p0x, p0y);
+        if (drawn <= split) {
+          const k = drawn / split;
+          ctx.lineTo(p0x + (p1x - p0x) * k, p0y + (p1y - p0y) * k);
+        } else {
+          const k = (drawn - split) / (1 - split);
+          ctx.lineTo(p1x, p1y);
+          ctx.lineTo(p1x + (p2x - p1x) * k, p1y + (p2y - p1y) * k);
+        }
         ctx.stroke();
       }
     }

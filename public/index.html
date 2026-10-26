@@ -150,20 +150,27 @@
 
         <div class="zoom-toolbar" aria-label="Board navigation controls">
           <button type="button" class="btn btn-icon" id="zoomOutBtn" title="Zoom out (-)" aria-label="Zoom out">
-            −
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
           </button>
-          <button type="button" class="btn btn-subtle" id="zoomFitBtn" title="Fit whole sheet (0)">
+          <button type="button" class="btn btn-subtle btn-with-icon" id="zoomFitBtn" title="Fit whole sheet (0)">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            </svg>
             Fit
           </button>
           <button type="button" class="btn btn-icon" id="zoomInBtn" title="Zoom in (+)" aria-label="Zoom in">
-            +
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14" /></svg>
           </button>
+          <span class="toolbar-divider desktop-only" aria-hidden="true"></span>
           <button
             type="button"
-            class="btn btn-subtle desktop-only"
+            class="btn btn-subtle btn-with-icon desktop-only"
             id="findActivityBtn"
             title="Jump to recent activity"
           >
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="7" />
+            </svg>
             Find activity
           </button>
         </div>
@@ -187,7 +194,7 @@
                 aria-label="Collapse map"
                 title="Collapse map"
               >
-                –
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
               </button>
             </div>
             <div class="minimap-body" id="minimapBody">
@@ -197,25 +204,20 @@
         </aside>
 
         <div class="hint-card" id="firstVisitHint" role="status" hidden>
-          <span class="hint-text" id="firstVisitHintText">
-            Drag to move. Ctrl + scroll or pinch to zoom. Click a box to check it.
-          </span>
-          <button
-            type="button"
-            class="hint-close"
-            id="hintCloseBtn"
-            aria-label="Dismiss hint"
-            title="Dismiss"
-          >
-            ×
-          </button>
+          <div class="hint-body">
+            <strong class="hint-title">One sheet, a million boxes, everyone at once.</strong>
+            <span class="hint-text" id="firstVisitHintText">
+              Drag to move. Ctrl + scroll or pinch to zoom. Click a box to check it.
+            </span>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm hint-close" id="hintCloseBtn">Got it</button>
         </div>
 
         <div class="mobile-sheet" id="mobileMenuSheet" role="dialog" aria-label="Menu" hidden>
           <div class="mobile-sheet-header">
             <span class="mobile-sheet-title">One Million Checkboxes</span>
             <button type="button" class="btn btn-icon" id="mobileMenuCloseBtn" aria-label="Close menu">
-              ×
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
             </button>
           </div>
 
@@ -255,6 +257,10 @@
           <span class="range-readout" id="rangeReadout">Rows 0–0</span>
           <span class="cell-readout" id="cellReadout">Box 0</span>
         </div>
+        <button type="button" class="activity-line" id="activityLine" hidden>
+          <span class="activity-dot" aria-hidden="true"></span>
+          <span class="activity-text" id="activityText"></span>
+        </button>
         <div class="status-right" id="statusCta"></div>
       </footer>
     </div>

@@ -44,8 +44,8 @@ async function main() {
     forceTimer.unref?.();
 
     try {
-      await new Promise((resolve) => httpServer.close(() => resolve()));
       await realtime.stop();
+      await new Promise((resolve) => httpServer.close(() => resolve()));
       await closeRedis();
       logger.info('graceful shutdown complete');
       process.exit(0);

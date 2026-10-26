@@ -3,7 +3,6 @@ import { logger } from '../logger.js';
 import { checkWsUserLimit, recordUserStrike } from '../ratelimit/wsLimiter.js';
 import { getBoardStats, getReplaySince, setBit } from '../redis/board.js';
 import {
-   OP,
   REJECT_CODE,
   decodeClientFrame,
   encodeAck,
@@ -25,15 +24,8 @@ function sendJson(ws, obj) {
   }
 }
 
-export async function handleSocketMessage(ws, rawData, isBinary) {
-  let decoded;
-  if (!isBinary && typeof rawData === 'string') {
-    decoded = decodeClientFrame(rawData, config.board.size);
-  } else if (!isBinary && Buffer.isBuffer(rawData) && rawData[0] === OP.JSON) {
-    decoded = decodeClientFrame(rawData, config.board.size);
-  } else {
-    decoded = decodeClientFrame(rawData, config.board.size);
-  }
+export async function handleSocketMessage(ws, rawData) {
+  const decoded = decodeClientFrame(rawData, config.board.size);
 
   if (decoded.type === 'ping') {
     sendBinary(ws, encodePong());

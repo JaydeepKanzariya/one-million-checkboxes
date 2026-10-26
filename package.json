@@ -1,0 +1,35 @@
+{
+  "name": "one-million-checkboxes",
+  "version": "1.0.0",
+  "description": "A real-time, multi-user grid of 1,000,000 checkboxes backed by Redis, WebSockets and OIDC.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "redis:local": "node scripts/dev-redis.js",
+    "start:app1": "node scripts/dev-multi.js",
+    "dev:multi": "node scripts/dev-multi.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "loadtest": "node scripts/loadtest.js",
+    "seed": "node scripts/seed.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "helmet": "^8.0.0",
+    "ioredis": "^5.4.1",
+    "openid-client": "^5.7.0",
+    "pino": "^9.5.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "pino-pretty": "^11.3.0",
+    "supertest": "^7.0.0",
+    "vitest": "^2.1.4"
+  }
+}

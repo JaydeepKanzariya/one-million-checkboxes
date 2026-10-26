@@ -1,0 +1,61 @@
+:root {
+  /* Engineering Ledger Palette — Light */
+  --paper: #eef2f5;
+  --paper-elevated: #f7f9fb;
+  --paper-subtle: #e3e9ef;
+  --rule: #c9d3dc;
+  --rule-strong: #aab8c6;
+  --ink: #1f2e4a;
+  --ink-muted: #51627f;
+  --ink-on-fill: #f7f9fb;
+  --signal: #e2a400;
+  --live: #3d7dd8;
+  --alert: #c2412d;
+  --online: #1f8b4c;
+
+  /* Typography */
+  --font-display: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Inter Tight', system-ui, -apple-system, sans-serif;
+
+  /* Sizing & Elevation */
+  --header-h: 54px;
+  --footer-h: 42px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --shadow-card: 0 6px 20px rgba(31, 46, 74, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #141b26;
+    --paper-elevated: #1b2433;
+    --paper-subtle: #202b3d;
+    --rule: #26324a;
+    --rule-strong: #394a6b;
+    --ink: #dce6f2;
+    --ink-muted: #8fa2bd;
+    --ink-on-fill: #141b26;
+    --signal: #f0b429;
+    --live: #5899f2;
+    --alert: #e55a44;
+    --online: #34c770;
+    --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.42);
+  }
+}
+
+:root[data-theme='dark'] {
+  --paper: #141b26;
+  --paper-elevated: #1b2433;
+  --paper-subtle: #202b3d;
+  --rule: #26324a;
+  --rule-strong: #394a6b;
+  --ink: #dce6f2;
+  --ink-muted: #8fa2bd;
+  --ink-on-fill: #141b26;
+  --signal: #f0b429;
+  --live: #5899f2;
+  --alert: #e55a44;
+  --online: #34c770;
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.42);
+}
+

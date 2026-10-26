@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>One Million Checkboxes</title>
+    <meta
+      name="description"
+      content="A shared, real-time engineering ledger of 1,000,000 checkboxes backed by Redis and WebSockets."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Inter+Tight:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles/tokens.css" />
+    <link rel="stylesheet" href="/styles/app.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar" role="banner">
+        <div class="brand-group">
+          <a href="#" class="brand" id="brandReset" title="Reset view to #0">
+            <span class="brand-mark" aria-hidden="true">▣</span>
+            <span class="brand-title">One Million Checkboxes</span>
+          </a>
+        </div>
+
+        <div class="metrics-group" aria-label="Live board statistics">
+          <div class="checked-metric">
+            <span class="checked-count" id="checkedCount">0</span>
+            <span class="checked-label">checked</span>
+          </div>
+          <div class="online-pill" id="connectionPill" title="Connected users and server instance">
+            <span class="status-dot" id="statusDot" aria-hidden="true"></span>
+            <span id="onlineCount">1</span>
+            <span class="online-label">online</span>
+            <span class="instance-badge" id="instanceBadge" hidden>app1</span>
+          </div>
+        </div>
+
+        <div class="controls-group">
+          <form class="goto-form" id="gotoForm" role="search" aria-label="Jump to checkbox number">
+            <label for="gotoInput" class="sr-only">Go to checkbox number</label>
+            <input
+              id="gotoInput"
+              class="goto-input"
+              type="number"
+              min="0"
+              max="999999"
+              step="1"
+              inputmode="numeric"
+              placeholder="Go to #…"
+            />
+            <button type="submit" class="btn btn-subtle goto-btn" title="Jump to checkbox">Go</button>
+          </form>
+
+          <button
+            type="button"
+            class="btn btn-icon"
+            id="themeToggleBtn"
+            aria-label="Toggle color theme"
+            title="Switch light/dark ledger theme"
+          >
+            <span id="themeIcon" aria-hidden="true">◐</span>
+          </button>
+
+          <div class="auth-slot" id="authSlot">
+            <a href="/auth/login" class="btn btn-primary" id="headerSignInBtn">Sign in</a>
+          </div>
+        </div>
+      </header>
+
+      <main class="stage" id="stage">
+        <canvas
+          id="boardCanvas"
+          class="board-canvas"
+          role="grid"
+          tabindex="0"
+          aria-label="One Million Checkboxes grid, 1,000 rows by 1,000 columns. Use arrow keys to move focus and Space or Enter to toggle."
+        ></canvas>
+
+        <div class="zoom-toolbar" aria-label="Zoom controls">
+          <button type="button" class="btn btn-icon" id="zoomInBtn" title="Zoom in (+)">+</button>
+          <button type="button" class="btn btn-subtle zoom-readout" id="zoomResetBtn" title="Reset zoom">
+            20px
+          </button>
+          <button type="button" class="btn btn-icon" id="zoomOutBtn" title="Zoom out (-)">−</button>
+        </div>
+
+        <aside class="minimap-card" id="minimapCard" aria-label="Board overview minimap">
+          <div class="minimap-header">
+            <span>Ledger overview</span>
+            <button
+              type="button"
+              class="minimap-collapse"
+              id="minimapToggleBtn"
+              aria-label="Toggle minimap"
+              title="Minimize or expand overview"
+            >
+              –
+            </button>
+          </div>
+          <div class="minimap-body" id="minimapBody">
+            <canvas id="minimapCanvas" width="200" height="200"></canvas>
+          </div>
+        </aside>
+
+        <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+        <div class="sr-only" id="a11yAnnouncer" aria-live="polite" aria-atomic="true"></div>
+      </main>
+
+      <footer class="statusbar" role="contentinfo">
+        <div class="status-left">
+          <span class="range-readout" id="rangeReadout">Viewing #0–#0</span>
+          <span class="status-sep" aria-hidden="true">·</span>
+          <span class="cell-readout" id="cellReadout">Cell #0</span>
+        </div>
+        <div class="status-right" id="statusCta">
+          <span class="status-note" id="statusMessage">You're viewing live. Sign in to check boxes.</span>
+          <a href="/auth/login" class="btn btn-primary btn-sm" id="footerSignInBtn">Sign in</a>
+        </div>
+      </footer>
+    </div>
+
+    <dialog class="dev-dialog" id="devLoginDialog" aria-labelledby="devDialogTitle">
+      <form method="dialog" class="dev-dialog-form" id="devLoginForm">
+        <h2 id="devDialogTitle">Sign in to check boxes</h2>
+        <p class="dev-dialog-desc" id="devDialogDesc">
+          Sign in with your OIDC account or pick a display name for local development.
+        </p>
+        <div class="dev-oidc-wrap" id="devOidcWrap" hidden>
+          <a href="/auth/login" class="btn btn-primary btn-block">Continue with Single Sign-On (OIDC)</a>
+          <div class="dev-divider"><span>or local dev session</span></div>
+        </div>
+        <label class="dev-field">
+          <span>Display name</span>
+          <input
+            type="text"
+            id="devNameInput"
+            name="name"
+            maxlength="32"
+            placeholder="e.g. Ada Lovelace"
+            required
+          />
+        </label>
+        <div class="dev-dialog-actions">
+          <button type="button" class="btn btn-subtle" id="devCancelBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Sign in</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/js/main.js"></script>
+  </body>
+</html>
+

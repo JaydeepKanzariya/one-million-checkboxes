@@ -4,6 +4,11 @@ import { redis } from '../redis/client.js';
 import { keys } from '../redis/keys.js';
 import { parseCookies } from '../utils/cookies.js';
 
+export function hashSessionId(sid) {
+  if (!sid) return null;
+  return crypto.createHash('sha256').update(String(sid)).digest('hex').slice(0, 16);
+}
+
 export async function createSession({ userId, name, email = '', picture = '' }) {
   const sid = crypto.randomBytes(32).toString('base64url');
   const session = {

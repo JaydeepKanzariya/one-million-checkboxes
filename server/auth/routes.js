@@ -13,6 +13,7 @@ import {
   clearSessionCookie,
   createSession,
   destroySession,
+  hashSessionId,
   setSessionCookie,
 } from './sessions.js';
 
@@ -74,15 +75,16 @@ authRouter.post(
   '/logout',
   attachUser,
   asyncHandler(async (req, res) => {
+    const sidHash = req.sessionId ? hashSessionId(req.sessionId) : null;
     if (req.sessionId) {
       await destroySession(req.sessionId);
     }
     clearSessionCookie(res);
 
-    if (req.user?.userId) {
+    if (sidHash) {
       await redis.publish(
         keys.chControl,
-        JSON.stringify({ t: 'logout', userId: req.user.userId }),
+        JSON.stringify({ t: 'logout', sidHash }),
       );
     }
 

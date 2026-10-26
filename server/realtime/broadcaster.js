@@ -97,8 +97,8 @@ export class Broadcaster {
         const ctrl = JSON.parse(message);
         if (ctrl.t === 'resync') {
           this.broadcastJson({ t: 'resync' });
-        } else if (ctrl.t === 'logout' && ctrl.userId) {
-          this.downgradeUserSockets(ctrl.userId);
+        } else if (ctrl.t === 'logout' && ctrl.sidHash) {
+          this.downgradeSessionSockets(ctrl.sidHash);
         }
       } catch {
         // Ignore malformed control payload
@@ -127,12 +127,13 @@ export class Broadcaster {
     }
   }
 
-  downgradeUserSockets(userId) {
+  downgradeSessionSockets(sidHash) {
     const payload = encodeJson({ t: 'session_expired' });
     for (const ws of this.sockets.values()) {
-      if (ws.user && ws.user.userId === userId) {
+      if (ws.sidHash && ws.sidHash === sidHash) {
         ws.user = null;
         ws.sessionId = null;
+        ws.sidHash = null;
         ws.readOnly = true;
         if (ws.readyState === 1) {
           ws.send(payload);

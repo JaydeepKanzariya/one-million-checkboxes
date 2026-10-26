@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
-import { getSession, getSessionFromCookieHeader } from '../auth/sessions.js';
+import { getSession, getSessionFromCookieHeader, hashSessionId } from '../auth/sessions.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { acquireConnectionSlot, releaseConnectionSlot } from '../ratelimit/connLimiter.js';
@@ -94,6 +94,7 @@ export function createRealtimeServer(httpServer) {
         ws.id = crypto.randomUUID();
         ws.ip = ip;
         ws.sessionId = sid;
+        ws.sidHash = sid ? hashSessionId(sid) : null;
         ws.user = user;
         ws.readOnly = !user;
         ws.isAlive = true;

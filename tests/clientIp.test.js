@@ -20,3 +20,4 @@ describe('extractClientIp (trust proxy hop counting)', () => {
     expect(extractClientIp(req, 0)).toBe('10.0.0.42');
   });
 });
+

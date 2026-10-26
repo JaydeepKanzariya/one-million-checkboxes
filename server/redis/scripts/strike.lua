@@ -33,3 +33,4 @@ end
 
 local blocks = tonumber(redis.call('GET', KEYS[3]) or '0')
 return { 0, strikes, blocks, 1000 }
+

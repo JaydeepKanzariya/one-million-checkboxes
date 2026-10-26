@@ -24,3 +24,4 @@ export function extractClientIp(req, trustProxy = config.trustProxy) {
   const index = Math.max(0, parts.length - trustProxy);
   return parts[index];
 }
+

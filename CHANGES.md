@@ -19,3 +19,4 @@ All items from [FIXES.md](./FIXES.md) have been implemented in order with indivi
 | **F12** | **Done** | Made `board.size = 1_000_000` and `board.cols = 1000` fixed constants in [server/config.js](./server/config.js) and removed `BOARD_SIZE` / `BOARD_COLS` from `.env.example` and `README.md`. |
 | **F13** | **Done** | Simplified `handleSocketMessage` in [server/realtime/handlers.js](./server/realtime/handlers.js), called `realtime.stop()` before `httpServer.close()` in [server/index.js](./server/index.js), and updated [Dockerfile](./Dockerfile) to use `npm ci --omit=dev` + `HEALTHCHECK`. |
 | **F14** | **Done** | Expanded [README.md](./README.md) with the OIDC sequence diagram & WS upgrade rules, detailed 3-layer rate-limiting design (keys, windows, counters, TTLs, fixed-window edge-burst trade-off, bucket vs user limits, strike/block escalation), scaling notes, Windows Redis options, and updated project tree. |
+

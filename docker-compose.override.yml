@@ -14,3 +14,4 @@ services:
       DEV_LOGIN: "true"
     ports:
       - "127.0.0.1:3002:3000"
+

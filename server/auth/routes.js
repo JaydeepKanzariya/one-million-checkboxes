@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
 import { config } from '../config.js';
+import { logger } from '../logger.js';
 import { authLimiter } from '../ratelimit/httpLimiter.js';
 import { redis } from '../redis/client.js';
 import { keys } from '../redis/keys.js';
@@ -58,6 +59,7 @@ if (config.devLogin && !config.isProd) {
         email: `${slug}@local.dev`,
         picture: '',
       });
+      logger.warn({ userId, name: rawName, ip: req.ip }, 'dev-login session created');
       setSessionCookie(res, sid);
       res.redirect(302, returnTo);
     }),

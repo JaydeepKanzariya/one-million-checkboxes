@@ -1,0 +1,16 @@
+# Local development overrides loaded automatically by `docker compose up`.
+# In production, run `docker compose -f docker-compose.yml up -d` to exclude this file.
+services:
+  app1:
+    environment:
+      NODE_ENV: development
+      DEV_LOGIN: "true"
+    ports:
+      - "127.0.0.1:3001:3000"
+
+  app2:
+    environment:
+      NODE_ENV: development
+      DEV_LOGIN: "true"
+    ports:
+      - "127.0.0.1:3002:3000"

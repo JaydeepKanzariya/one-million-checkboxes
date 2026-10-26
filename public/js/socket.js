@@ -68,6 +68,15 @@ export class RealtimeSocket {
     });
   }
 
+  // Asks the server to replay updates after lastSeq from its Redis Stream.
+  sendHello(lastSeq) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !(lastSeq > 0)) {
+      return false;
+    }
+    this.ws.send(encodeJson({ t: 'hello', lastSeq }));
+    return true;
+  }
+
   sendSet(index, value) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return false;

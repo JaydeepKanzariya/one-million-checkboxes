@@ -20,3 +20,13 @@ All items from [FIXES.md](./FIXES.md) have been implemented in order with indivi
 | **F13** | **Done** | Simplified `handleSocketMessage` in [server/realtime/handlers.js](./server/realtime/handlers.js), called `realtime.stop()` before `httpServer.close()` in [server/index.js](./server/index.js), and updated [Dockerfile](./Dockerfile) to use `npm ci --omit=dev` + `HEALTHCHECK`. |
 | **F14** | **Done** | Expanded [README.md](./README.md) with the OIDC sequence diagram & WS upgrade rules, detailed 3-layer rate-limiting design (keys, windows, counters, TTLs, fixed-window edge-burst trade-off, bucket vs user limits, strike/block escalation), scaling notes, Windows Redis options, and updated project tree. |
 
+
+## Review follow-ups
+
+| Item | Status | Details |
+|---|---|---|
+| **R1** | **Done** | [server/redis/client.js](./server/redis/client.js): `retryStrategy` gives up after 5 tries only before the first successful connect (`booted` flag). Once the instance is running it keeps reconnecting forever, so a Redis restart no longer detaches it permanently. |
+| **R2** | **Done** | [public/js/sequencer.js](./public/js/sequencer.js) calls `onGap(appliedSeq)` once when a gap opens. [public/js/main.js](./public/js/main.js) then sends `hello{lastSeq}` through the new `socket.sendHello()`, so the server replays from the Redis Stream. A full snapshot reload is now only the timeout fallback. New test in [tests/sequencer.test.js](./tests/sequencer.test.js). |
+| **R3** | **Done** | `loadSnapshot()` in [public/js/main.js](./public/js/main.js) is single-flight: a `resync` message and a gap timeout share one in-flight load, so an older response can't rewind the sequencer. |
+| **R4** | **Done** | Removed the broken `docs/screenshot-placeholder.png` image from [README.md](./README.md) and left a TODO to add a real screenshot. |
+| **R5** | **Open** | Integration tests (`board`, `wsLimiter`, `api`) still need to run against a real Redis. Deploy with a separate production env file, not the local `.env` (which has `DEV_LOGIN=true`). |

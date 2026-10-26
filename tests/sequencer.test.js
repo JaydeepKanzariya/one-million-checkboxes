@@ -71,6 +71,34 @@ describe('Client Sequencer', () => {
     expect(state.get(42)).toBe(0);
   });
 
+  it('calls onGap once per gap with appliedSeq so the client can request a replay', () => {
+    vi.useFakeTimers();
+    try {
+      const gaps = [];
+      const seq = new Sequencer({
+        apply: () => {},
+        onGap: (appliedSeq) => gaps.push(appliedSeq),
+        gapTimeoutMs: 500,
+      });
+      seq.reset(10);
+
+      seq.push(13, 1, 1); // missing 11, 12
+      seq.push(14, 2, 1); // same gap: no second request
+      expect(gaps).toEqual([10]);
+
+      seq.push(11, 3, 1); // still missing 12, gap stays open
+      expect(gaps).toEqual([10]);
+
+      seq.push(12, 4, 1); // gap filled and drained
+      expect(seq.appliedSeq).toBe(14);
+
+      seq.push(16, 5, 1); // a new gap opens
+      expect(gaps).toEqual([10, 14]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('calls onGapTimeout when a gap remains unfilled past gapTimeoutMs', () => {
     vi.useFakeTimers();
     try {

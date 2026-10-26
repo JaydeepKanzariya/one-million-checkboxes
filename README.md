@@ -5,7 +5,9 @@ A real-time, multi-user grid of **1,000,000 checkboxes** (`1,000 × 1,000`). Eve
 - **Live Deployment:** `https://<your-production-domain>` *(placeholder — update after deployment)*
 - **YouTube Demo Video:** `https://youtu.be/<your-demo-video-id>` *(placeholder — ~4 min walkthrough)*
 
-![One Million Checkboxes — Engineering Ledger UI](./docs/screenshot-placeholder.png)
+<!-- TODO before submitting: save a screenshot as docs/screenshot.png and replace this comment with:
+![One Million Checkboxes — Engineering Ledger UI](./docs/screenshot.png) -->
+- **Screenshot:** *(placeholder — add `docs/screenshot.png` before submitting)*
 
 ---
 

@@ -2,8 +2,9 @@
 // appliedSeq is the highest sequence number whose effect is contiguously applied from the snapshot.
 
 export class Sequencer {
-  constructor({ apply, onGapTimeout, gapTimeoutMs = 2000, maxBuffer = 20_000 } = {}) {
+  constructor({ apply, onGap, onGapTimeout, gapTimeoutMs = 2000, maxBuffer = 20_000 } = {}) {
     this.apply = apply;
+    this.onGap = onGap; // called once when a gap opens, so the caller can request a replay
     this.onGapTimeout = onGapTimeout;
     this.gapTimeoutMs = gapTimeoutMs;
     this.maxBuffer = maxBuffer;
@@ -76,6 +77,7 @@ export class Sequencer {
         this.onGapTimeout?.();
       }
     }, this.gapTimeoutMs);
+    this.onGap?.(this._appliedSeq);
   }
 
   clearGapTimer() {

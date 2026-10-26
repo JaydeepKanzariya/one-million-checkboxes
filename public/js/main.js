@@ -88,12 +88,28 @@ const sequencer = new Sequencer({
     }
     reconcilePendingAfterSeqAdvance();
   },
+  onGap(appliedSeq) {
+    // Try a cheap replay from the server's Redis Stream first; the timeout falls back to a full snapshot.
+    socket.sendHello(appliedSeq);
+  },
   onGapTimeout() {
     loadSnapshot();
   },
 });
 
-async function loadSnapshot() {
+// Only one snapshot load runs at a time, so an older response can never rewind the sequencer.
+let snapshotPromise = null;
+
+function loadSnapshot() {
+  if (!snapshotPromise) {
+    snapshotPromise = fetchAndApplySnapshot().finally(() => {
+      snapshotPromise = null;
+    });
+  }
+  return snapshotPromise;
+}
+
+async function fetchAndApplySnapshot() {
   try {
     snapshotLoaded = false;
     const snap = await fetchBoardSnapshot();

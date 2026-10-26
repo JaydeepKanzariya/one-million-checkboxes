@@ -16,6 +16,10 @@ const strikeScript = fs.readFileSync(path.join(scriptsDir, 'strike.lua'), 'utf8'
 // Normalize localhost -> 127.0.0.1 on Windows so Node v24 doesn't fail on IPv6 ::1
 export const normalizedRedisUrl = config.redisUrl.replace('://localhost:', '://127.0.0.1:');
 
+// Fail fast only while booting. Once connected, keep reconnecting forever so a
+// Redis restart or network blip never leaves the instance permanently detached.
+let booted = false;
+
 function createClient(name) {
   const client = new Redis(normalizedRedisUrl, {
     lazyConnect: true,
@@ -24,7 +28,7 @@ function createClient(name) {
     enableReadyCheck: true,
     connectionName: `${config.redisPrefix}:${config.instanceId}:${name}`,
     retryStrategy(times) {
-      if (times > 5) return null;
+      if (!booted && times > 5) return null;
       return Math.min(times * 200, 2000);
     },
   });
@@ -64,6 +68,7 @@ export async function connectRedis() {
   try {
     if (redis.status === 'wait') await redis.connect();
     if (subscriber.status === 'wait') await subscriber.connect();
+    booted = true;
   } catch (err) {
     logger.fatal(
       { url: config.redisUrl, err: err.message },

@@ -1,3 +1,4 @@
+import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 import { Router } from 'express';
 import { attachUser } from '../auth/middleware.js';
@@ -7,6 +8,39 @@ import { apiLimiter } from '../ratelimit/httpLimiter.js';
 import { getActiveInstances, getOnlineCount } from '../realtime/presence.js';
 import { getBoardStats, getSnapshot } from '../redis/board.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+
+const gzipAsync = promisify(zlib.gzip);
+
+// Module-level gzip cache keyed by board sequence number
+let gzipCache = {
+  seq: -1,
+  gz: null,
+  inFlightSeq: -1,
+  inFlightPromise: null,
+};
+
+async function getCompressedSnapshot(seq, buffer) {
+  if (gzipCache.seq === seq && gzipCache.gz) {
+    return gzipCache.gz;
+  }
+  if (gzipCache.inFlightSeq === seq && gzipCache.inFlightPromise) {
+    return gzipCache.inFlightPromise;
+  }
+
+  const promise = gzipAsync(buffer, { level: zlib.constants.Z_BEST_SPEED }).then((gz) => {
+    gzipCache = {
+      seq,
+      gz,
+      inFlightSeq: -1,
+      inFlightPromise: null,
+    };
+    return gz;
+  });
+
+  gzipCache.inFlightSeq = seq;
+  gzipCache.inFlightPromise = promise;
+  return promise;
+}
 
 export const apiRouter = Router();
 
@@ -47,6 +81,21 @@ apiRouter.get(
 apiRouter.get(
   '/board',
   asyncHandler(async (req, res) => {
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (ifNoneMatch) {
+      const stats = await getBoardStats();
+      const currentEtag = `"${stats.seq}"`;
+      if (ifNoneMatch === currentEtag) {
+        res.setHeader('ETag', currentEtag);
+        res.setHeader('X-Board-Seq', String(stats.seq));
+        res.setHeader('X-Board-Checked', String(stats.checked));
+        res.setHeader('X-Instance-Id', config.instanceId);
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Vary', 'Accept-Encoding');
+        return res.status(304).end();
+      }
+    }
+
     const { buffer, seq, checked } = await getSnapshot();
     const etag = `"${seq}"`;
 
@@ -57,16 +106,15 @@ apiRouter.get(
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Vary', 'Accept-Encoding');
 
-    if (req.headers['if-none-match'] === etag) {
+    if (ifNoneMatch === etag) {
       return res.status(304).end();
     }
 
     res.setHeader('Content-Type', 'application/octet-stream');
 
     const acceptEncoding = String(req.headers['accept-encoding'] || '');
-    // Only gzip when client explicitly asks and doesn't pass ?raw=1
     if (acceptEncoding.includes('gzip') && req.query.raw !== '1') {
-      const compressed = zlib.gzipSync(buffer, { level: zlib.constants.Z_BEST_SPEED });
+      const compressed = await getCompressedSnapshot(seq, buffer);
       res.setHeader('Content-Encoding', 'gzip');
       res.setHeader('Content-Length', String(compressed.length));
       return res.status(200).end(compressed);
@@ -96,4 +144,3 @@ apiRouter.get(
     });
   }),
 );
-

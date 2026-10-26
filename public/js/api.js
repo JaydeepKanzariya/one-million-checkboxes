@@ -12,7 +12,7 @@ export async function fetchMe() {
 export async function fetchBoardSnapshot() {
   const res = await fetch('/api/board', {
     credentials: 'same-origin',
-    cache: 'no-store',
+    cache: 'no-cache',
   });
   if (!res.ok) {
     throw new Error(`Failed to load board (${res.status})`);

@@ -59,6 +59,10 @@ export function createRealtimeServer(httpServer) {
   });
 
   httpServer.on('upgrade', async (req, socket, head) => {
+    const ip = extractClientIp(req);
+    let slotHeld = false;
+    let upgraded = false;
+
     try {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       if (url.pathname !== '/ws' && url.pathname !== '/') {
@@ -70,15 +74,23 @@ export function createRealtimeServer(httpServer) {
         return rejectUpgrade(socket, '403 Forbidden', 'Origin not allowed');
       }
 
-      const ip = extractClientIp(req);
       const slot = await acquireConnectionSlot(ip);
       if (!slot.allowed) {
         return rejectUpgrade(socket, '429 Too Many Requests', 'Connection limit exceeded');
       }
+      slotHeld = true;
+
+      socket.once('close', () => {
+        if (!upgraded && slotHeld) {
+          slotHeld = false;
+          releaseConnectionSlot(ip);
+        }
+      });
 
       const { sid, user } = await getSessionFromCookieHeader(req.headers.cookie, { touch: true });
 
       wss.handleUpgrade(req, socket, head, (ws) => {
+        upgraded = true;
         ws.id = crypto.randomUUID();
         ws.ip = ip;
         ws.sessionId = sid;
@@ -92,6 +104,10 @@ export function createRealtimeServer(httpServer) {
         wss.emit('connection', ws, req);
       });
     } catch (err) {
+      if (slotHeld && !upgraded) {
+        slotHeld = false;
+        releaseConnectionSlot(ip);
+      }
       logger.error({ err }, 'ws upgrade failed');
       rejectUpgrade(socket, '500 Internal Server Error', 'Upgrade failed');
     }

@@ -1,11 +1,40 @@
-// Starts local Redis (if not already running on :6379), seeds the board,
-// and launches both app1 (:3001) and app2 (:3002) in one terminal.
+// Launches both app1 (:3001) and app2 (:3002) against an existing Redis instance.
 
 import { spawn } from 'node:child_process';
-import { startLocalRedisServer } from './dev-redis.js';
+import net from 'node:net';
+import { config } from '../server/config.js';
+import { normalizedRedisUrl } from '../server/redis/client.js';
+
+async function isRedisReachable() {
+  const parsed = new URL(normalizedRedisUrl);
+  const host = parsed.hostname || '127.0.0.1';
+  const port = Number(parsed.port || 6379);
+
+  return new Promise((resolve) => {
+    const sock = new net.Socket();
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      sock.destroy();
+      resolve(ok);
+    };
+    sock.setTimeout(800);
+    sock.once('connect', () => finish(true));
+    sock.once('timeout', () => finish(false));
+    sock.once('error', () => finish(false));
+    sock.connect(port, host);
+  });
+}
 
 async function main() {
-  const redisSrv = await startLocalRedisServer();
+  const ok = await isRedisReachable();
+  if (!ok) {
+    console.error(
+      `Cannot reach Redis at ${config.redisUrl}. Start it with: docker run -d -p 6379:6379 redis:7-alpine`,
+    );
+    process.exit(1);
+  }
 
   const children = [];
   function spawnNode(label, script, envOverrides = {}) {
@@ -22,7 +51,6 @@ async function main() {
     return child;
   }
 
-  // Seed initial board if empty
   await new Promise((resolve) => {
     const seed = spawn(process.execPath, ['scripts/seed.js'], {
       stdio: 'inherit',
@@ -47,7 +75,7 @@ async function main() {
     PUBLIC_URL: 'http://localhost:3002',
   });
 
-  const shutdown = async () => {
+  const shutdown = () => {
     for (const c of children) {
       try {
         c.kill('SIGTERM');
@@ -55,7 +83,6 @@ async function main() {
         // Ignore
       }
     }
-    await redisSrv.close();
     process.exit(0);
   };
 
@@ -67,4 +94,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-

@@ -10,8 +10,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "redis:local": "node scripts/dev-redis.js",
-    "start:app1": "node scripts/dev-multi.js",
+    "redis": "docker run -d --name omc-redis -p 6379:6379 redis:7-alpine --appendonly yes",
     "dev:multi": "node scripts/dev-multi.js",
     "test": "vitest run",
     "test:watch": "vitest",

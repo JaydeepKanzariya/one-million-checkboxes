@@ -1,9 +1,7 @@
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
-import { startLocalRedisServer } from '../../scripts/dev-redis.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 
@@ -15,7 +13,7 @@ const httpLimitScript = fs.readFileSync(path.join(scriptsDir, 'http_limit.lua'),
 const wsLimitScript = fs.readFileSync(path.join(scriptsDir, 'ws_limit.lua'), 'utf8');
 
 // Normalize localhost -> 127.0.0.1 on Windows so Node v24 doesn't fail on IPv6 ::1
-const normalizedRedisUrl = config.redisUrl.replace('://localhost:', '://127.0.0.1:');
+export const normalizedRedisUrl = config.redisUrl.replace('://localhost:', '://127.0.0.1:');
 
 function createClient(name) {
   const client = new Redis(normalizedRedisUrl, {
@@ -25,7 +23,8 @@ function createClient(name) {
     enableReadyCheck: true,
     connectionName: `${config.redisPrefix}:${config.instanceId}:${name}`,
     retryStrategy(times) {
-      return Math.min(times * 200, 3000);
+      if (times > 5) return null;
+      return Math.min(times * 200, 2000);
     },
   });
 
@@ -55,45 +54,19 @@ redis.defineCommand('wsLimitLua', {
   lua: wsLimitScript,
 });
 
-let embeddedRedis = null;
-
-async function isPortReachable(port, host = '127.0.0.1', timeoutMs = 300) {
-  return new Promise((resolve) => {
-    const sock = new net.Socket();
-    let done = false;
-    const finish = (ok) => {
-      if (done) return;
-      done = true;
-      sock.destroy();
-      resolve(ok);
-    };
-    sock.setTimeout(timeoutMs);
-    sock.once('connect', () => finish(true));
-    sock.once('timeout', () => finish(false));
-    sock.once('error', () => finish(false));
-    sock.connect(port, host);
-  });
-}
-
 export async function connectRedis() {
-  if (!config.isProd) {
-    try {
-      const parsed = new URL(normalizedRedisUrl);
-      const host = parsed.hostname || '127.0.0.1';
-      const port = Number(parsed.port || 6379);
-      if ((host === '127.0.0.1' || host === 'localhost') && port === 6379) {
-        const up = await isPortReachable(port, '127.0.0.1');
-        if (!up && !embeddedRedis) {
-          embeddedRedis = await startLocalRedisServer();
-        }
-      }
-    } catch {
-      // Ignore URL parse error
-    }
+  try {
+    if (redis.status === 'wait') await redis.connect();
+    if (subscriber.status === 'wait') await subscriber.connect();
+  } catch (err) {
+    logger.fatal(
+      { url: config.redisUrl, err: err.message },
+      `Cannot reach Redis at ${config.redisUrl}. Start it with: docker run -d -p 6379:6379 redis:7-alpine`,
+    );
+    throw new Error(
+      `Cannot reach Redis at ${config.redisUrl}. Start it with: docker run -d -p 6379:6379 redis:7-alpine`,
+    );
   }
-
-  if (redis.status === 'wait') await redis.connect();
-  if (subscriber.status === 'wait') await subscriber.connect();
 }
 
 export function isRedisReady() {
@@ -105,8 +78,4 @@ export async function closeRedis() {
     subscriber.status !== 'end' ? subscriber.quit() : Promise.resolve(),
     redis.status !== 'end' ? redis.quit() : Promise.resolve(),
   ]);
-  if (embeddedRedis) {
-    await embeddedRedis.close();
-    embeddedRedis = null;
-  }
 }

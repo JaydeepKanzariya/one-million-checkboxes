@@ -26,7 +26,7 @@ services:
       TRUST_PROXY: 1
       DEV_LOGIN: ${DEV_LOGIN:-true}
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     depends_on:
       redis:
         condition: service_healthy
@@ -52,7 +52,7 @@ services:
       TRUST_PROXY: 1
       DEV_LOGIN: ${DEV_LOGIN:-true}
     ports:
-      - "3002:3000"
+      - "127.0.0.1:3002:3000"
     depends_on:
       redis:
         condition: service_healthy

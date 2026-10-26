@@ -13,22 +13,10 @@ import {
   unregisterPresence,
 } from './presence.js';
 import { encodeJson } from './protocol.js';
+import { extractClientIp } from '../utils/clientIp.js';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const SESSION_RECHECK_INTERVAL_MS = 60_000;
-
-function extractClientIp(req) {
-  if (config.trustProxy > 0) {
-    const xff = req.headers['x-forwarded-for'];
-    if (typeof xff === 'string' && xff.trim()) {
-      const parts = xff.split(',').map((s) => s.trim()).filter(Boolean);
-      if (parts.length > 0) {
-        return parts[0];
-      }
-    }
-  }
-  return req.socket?.remoteAddress || '127.0.0.1';
-}
 
 function isOriginAllowed(originHeader) {
   if (!originHeader) {

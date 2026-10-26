@@ -24,7 +24,7 @@ export const keys = Object.freeze({
   rlConnRate: (ip, windowId) => `${p}:rl:connrate:${ip}:${windowId}`,
 
   presence: `${p}:presence`,
+  instances: `${p}:instances`,
   instance: (id) => `${p}:instance:${id}`,
-  instancePattern: `${p}:instance:*`,
 });
 

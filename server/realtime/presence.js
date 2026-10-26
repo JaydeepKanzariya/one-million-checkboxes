@@ -31,6 +31,7 @@ export async function refreshPresenceAndInstance(localSocketIds) {
   }
 
   multi.zremrangebyscore(keys.presence, 0, now - PRESENCE_STALE_MS);
+  multi.sadd(keys.instances, config.instanceId);
   multi.set(
     keys.instance(config.instanceId),
     JSON.stringify({
@@ -44,7 +45,7 @@ export async function refreshPresenceAndInstance(localSocketIds) {
   multi.zcard(keys.presence);
 
   const res = await multi.exec();
-  const zcardIdx = localSocketIds.length > 0 ? 3 : 2;
+  const zcardIdx = localSocketIds.length > 0 ? 4 : 3;
   return Number(res?.[zcardIdx]?.[1] ?? localSocketIds.length);
 }
 
@@ -54,6 +55,7 @@ export async function removeInstanceHeartbeat(localSocketIds = []) {
     if (localSocketIds.length > 0) {
       multi.zrem(keys.presence, ...localSocketIds);
     }
+    multi.srem(keys.instances, config.instanceId);
     multi.del(keys.instance(config.instanceId));
     await multi.exec();
   } catch {
@@ -69,21 +71,38 @@ export async function getOnlineCount() {
 }
 
 export async function getActiveInstances() {
-  const instanceKeys = await redis.keys(keys.instancePattern);
-  if (!instanceKeys || instanceKeys.length === 0) {
+  const ids = await redis.smembers(keys.instances);
+  if (!ids || ids.length === 0) {
     return [{ id: config.instanceId, sockets: 0 }];
   }
+
+  const instanceKeys = ids.map((id) => keys.instance(id));
   const rawList = await redis.mget(instanceKeys);
+
   const instances = [];
-  for (const item of rawList) {
-    if (!item) continue;
+  const expiredIds = [];
+
+  for (let i = 0; i < ids.length; i++) {
+    const item = rawList[i];
+    if (!item) {
+      expiredIds.push(ids[i]);
+      continue;
+    }
     try {
       instances.push(JSON.parse(item));
     } catch {
-      // Ignore malformed entry
+      expiredIds.push(ids[i]);
     }
   }
+
+  if (expiredIds.length > 0) {
+    await redis.srem(keys.instances, ...expiredIds);
+  }
+
+  if (instances.length === 0) {
+    return [{ id: config.instanceId, sockets: 0 }];
+  }
+
   instances.sort((a, b) => String(a.id).localeCompare(String(b.id)));
   return instances;
 }
-

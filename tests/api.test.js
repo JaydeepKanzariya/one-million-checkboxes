@@ -15,7 +15,7 @@ import {
   decodeServerFrame,
   encodeSet,
 } from '../server/realtime/protocol.js';
-import { createRealtimeServer } from '../server/realtime/wsServer.js';
+import { buildWelcomePayload, createRealtimeServer } from '../server/realtime/wsServer.js';
 import { BOARD_BYTE_LENGTH, ensureBoardInitialized } from '../server/redis/board.js';
 import { setupTestRedis } from './helpers/redisHarness.js';
 
@@ -201,9 +201,13 @@ describe('HTTP API + WebSocket integration', () => {
   it('rejects unauthenticated WebSocket SET with REJECT code=1 (AUTH)', async () => {
     if (loopbackAllowed) {
       const ws = new WebSocket(wsUrl);
-      await new Promise((resolve, reject) => {
-        ws.once('open', resolve);
-        ws.once('error', reject);
+      const welcomePromise = new Promise((resolve) => {
+        ws.on('message', (data, isBinary) => {
+          const decoded = decodeServerFrame(isBinary ? data : data.toString());
+          if (decoded.type === 'json' && decoded.message.t === 'welcome') {
+            resolve(decoded.message);
+          }
+        });
       });
 
       const rejectFramePromise = new Promise((resolve) => {
@@ -212,6 +216,15 @@ describe('HTTP API + WebSocket integration', () => {
           if (decoded.type === 'reject') resolve(decoded);
         });
       });
+
+      await new Promise((resolve, reject) => {
+        ws.once('open', resolve);
+        ws.once('error', reject);
+      });
+
+      const welcome = await welcomePromise;
+      expect(welcome.limits.bucketCapacity).toBe(config.rl.wsBucketCapacity);
+      expect(welcome.limits.bucketRefillPerS).toBe(config.rl.wsBucketRefillPerS);
 
       ws.send(encodeSet(42, 1));
       const rejected = await rejectFramePromise;
@@ -235,6 +248,10 @@ describe('HTTP API + WebSocket integration', () => {
         sent.push(decodeServerFrame(buf));
       },
     };
+    const welcome = buildWelcomePayload(fakeWs, { seq: 0, online: 1, checked: 0 });
+    expect(welcome.limits.bucketCapacity).toBe(config.rl.wsBucketCapacity);
+    expect(welcome.limits.bucketRefillPerS).toBe(config.rl.wsBucketRefillPerS);
+
     await handleSocketMessage(fakeWs, encodeSet(42, 1), true);
     expect(sent[0]).toEqual({ type: 'reject', index: 42, code: REJECT_CODE.AUTH });
   });

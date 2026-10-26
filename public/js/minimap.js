@@ -1,6 +1,10 @@
+import { prefersReducedMotion } from './motion.js';
+
 const COLS = 1000;
 const SIZE = 200;
 const BLOCK = COLS / SIZE; // 5x5 cells per minimap pixel
+const BLIP_DURATION_MS = 1500;
+const MAX_BLIPS = 300;
 
 function parseHexRgb(hex) {
   const clean = hex.trim().replace('#', '');
@@ -9,11 +13,12 @@ function parseHexRgb(hex) {
 }
 
 export class Minimap {
-  constructor(canvas, bitset, renderer) {
+  constructor(canvas, bitset, renderer, { onNavigate } = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.bitset = bitset;
     this.renderer = renderer;
+    this.onNavigate = onNavigate;
 
     this.offscreen = document.createElement('canvas');
     this.offscreen.width = SIZE;
@@ -26,6 +31,10 @@ export class Minimap {
     this.bounds = { colStart: 0, rowStart: 0, colEnd: 50, rowEnd: 50 };
     this.dragging = false;
 
+    // Ring buffer of remote activity blips: Array<{ x: number, y: number, startMs: number }>
+    this.blips = [];
+    this.blipRafId = null;
+
     this.bindEvents();
   }
 
@@ -36,10 +45,12 @@ export class Minimap {
       const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
       const col = Math.floor(nx * COLS);
       const row = Math.floor(ny * COLS);
+      this.renderer.cancelAnimation();
       this.renderer.camX = col * this.renderer.cellSize - this.renderer.width / 2;
       this.renderer.camY = row * this.renderer.cellSize - this.renderer.height / 2;
       this.renderer.clampCamera();
       this.renderer.requestFullRedraw();
+      this.onNavigate?.();
     };
 
     this.canvas.addEventListener('pointerdown', (e) => {
@@ -60,18 +71,43 @@ export class Minimap {
     this.canvas.addEventListener('pointercancel', stopDrag);
   }
 
+  addBlip(index, nowMs = performance.now()) {
+    if (index < 0 || index >= 1_000_000) return;
+    const row = Math.floor(index / COLS);
+    const col = index % COLS;
+    const x = (col / COLS) * SIZE;
+    const y = (row / COLS) * SIZE;
+
+    if (this.blips.length >= MAX_BLIPS) {
+      this.blips.shift();
+    }
+    this.blips.push({ x, y, startMs: nowMs });
+    this.scheduleBlipFrame();
+  }
+
+  scheduleBlipFrame() {
+    if (this.blipRafId !== null) return;
+    this.blipRafId = requestAnimationFrame((nowMs) => {
+      this.blipRafId = null;
+      this.drawOverlay(nowMs);
+      if (this.blips.length > 0) {
+        this.scheduleBlipFrame();
+      }
+    });
+  }
+
   markDirty() {
     this.bitmapDirty = true;
     const now = performance.now();
     if (now - this.lastBitmapRebuildMs >= 1000) {
       this.rebuildBitmap();
-      this.drawOverlay();
+      this.drawOverlay(now);
     }
   }
 
   forceRebuild() {
     this.rebuildBitmap();
-    this.drawOverlay();
+    this.drawOverlay(performance.now());
   }
 
   updateViewport(bounds) {
@@ -80,13 +116,13 @@ export class Minimap {
     if (this.bitmapDirty && now - this.lastBitmapRebuildMs >= 1000) {
       this.rebuildBitmap();
     }
-    this.drawOverlay();
+    this.drawOverlay(now);
   }
 
   rebuildBitmap() {
     const styles = getComputedStyle(document.documentElement);
-    const paperRgb = parseHexRgb(styles.getPropertyValue('--paper').trim() || '#EEF2F5');
-    const inkRgb = parseHexRgb(styles.getPropertyValue('--ink').trim() || '#1F2E4A');
+    const paperRgb = parseHexRgb(styles.getPropertyValue('--paper').trim() || '#EDF2EA');
+    const inkRgb = parseHexRgb(styles.getPropertyValue('--ink').trim() || '#1C2740');
     const data = this.imageData.data;
 
     let ptr = 0;
@@ -101,7 +137,6 @@ export class Minimap {
             if (this.bitset.get(base + dc)) setBits++;
           }
         }
-        // Boost visibility of sparse checked cells in the 5x5 block
         const ratio = setBits === 0 ? 0 : Math.min(1, 0.35 + (setBits / 25) * 0.65);
         data[ptr] = Math.round(paperRgb[0] + (inkRgb[0] - paperRgb[0]) * ratio);
         data[ptr + 1] = Math.round(paperRgb[1] + (inkRgb[1] - paperRgb[1]) * ratio);
@@ -116,10 +151,31 @@ export class Minimap {
     this.lastBitmapRebuildMs = performance.now();
   }
 
-  drawOverlay() {
+  drawOverlay(nowMs = performance.now()) {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, SIZE, SIZE);
     ctx.drawImage(this.offscreen, 0, 0);
+
+    const styles = getComputedStyle(document.documentElement);
+    const signal = styles.getPropertyValue('--signal').trim() || '#E0A100';
+    const liveHex = styles.getPropertyValue('--live').trim() || '#2F6FD0';
+    const [lr, lg, lb] = parseHexRgb(liveHex);
+
+    // Draw fading remote activity blips (3px dots in --live fading over 1.5s)
+    if (this.blips.length > 0) {
+      const reduced = prefersReducedMotion();
+      let writeIdx = 0;
+      for (let i = 0; i < this.blips.length; i++) {
+        const blip = this.blips[i];
+        const age = nowMs - blip.startMs;
+        if (age >= BLIP_DURATION_MS) continue;
+        this.blips[writeIdx++] = blip;
+        const alpha = reduced ? 0.9 : Math.max(0, 1 - age / BLIP_DURATION_MS);
+        ctx.fillStyle = `rgba(${lr}, ${lg}, ${lb}, ${alpha.toFixed(3)})`;
+        ctx.fillRect(Math.round(blip.x) - 1, Math.round(blip.y) - 1, 3, 3);
+      }
+      this.blips.length = writeIdx;
+    }
 
     const { colStart, rowStart, colEnd, rowEnd } = this.bounds;
     const x = (colStart / COLS) * SIZE;
@@ -127,12 +183,8 @@ export class Minimap {
     const w = Math.max(4, ((colEnd - colStart + 1) / COLS) * SIZE);
     const h = Math.max(4, ((rowEnd - rowStart + 1) / COLS) * SIZE);
 
-    const styles = getComputedStyle(document.documentElement);
-    const signal = styles.getPropertyValue('--signal').trim() || '#E2A400';
-
     ctx.strokeStyle = signal;
     ctx.lineWidth = 2;
     ctx.strokeRect(x + 1, y + 1, Math.min(SIZE - 2, w), Math.min(SIZE - 2, h));
   }
 }
-

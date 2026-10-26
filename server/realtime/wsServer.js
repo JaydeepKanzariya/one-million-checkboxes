@@ -48,6 +48,28 @@ function rejectUpgrade(socket, status, message) {
   }
 }
 
+export function buildWelcomePayload(ws, welcomeState) {
+  return {
+    t: 'welcome',
+    socketId: ws.id,
+    instanceId: config.instanceId,
+    user: ws.user
+      ? {
+          userId: ws.user.userId,
+          name: ws.user.name,
+          picture: ws.user.picture,
+        }
+      : null,
+    seq: welcomeState.seq,
+    online: Math.max(1, welcomeState.online),
+    checked: welcomeState.checked,
+    limits: {
+      bucketCapacity: config.rl.wsBucketCapacity,
+      bucketRefillPerS: config.rl.wsBucketRefillPerS,
+    },
+  };
+}
+
 export function createRealtimeServer(httpServer) {
   const sockets = new Map();
   const broadcaster = new Broadcaster(sockets);
@@ -148,23 +170,7 @@ export function createRealtimeServer(httpServer) {
       await registerPresence(ws.id);
       const welcomeState = await getInitialWelcomeState();
       if (ws.readyState === 1) {
-        ws.send(
-          encodeJson({
-            t: 'welcome',
-            socketId: ws.id,
-            instanceId: config.instanceId,
-            user: ws.user
-              ? {
-                  userId: ws.user.userId,
-                  name: ws.user.name,
-                  picture: ws.user.picture,
-                }
-              : null,
-            seq: welcomeState.seq,
-            online: Math.max(1, welcomeState.online),
-            checked: welcomeState.checked,
-          }),
-        );
+        ws.send(encodeJson(buildWelcomePayload(ws, welcomeState)));
       }
       logger.debug({ socketId: ws.id, userId: ws.user?.userId || null }, 'socket connected');
     } catch (err) {

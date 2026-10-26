@@ -6,12 +6,12 @@
     <title>One Million Checkboxes</title>
     <meta
       name="description"
-      content="A shared, real-time engineering ledger of 1,000,000 checkboxes backed by Redis and WebSockets."
+      content="A shared, real-time accounting ledger of 1,000,000 checkboxes backed by Redis and WebSockets."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Inter+Tight:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles/tokens.css" />
@@ -21,54 +21,121 @@
     <div class="app-shell">
       <header class="topbar" role="banner">
         <div class="brand-group">
-          <a href="#" class="brand" id="brandReset" title="Reset view to #0">
-            <span class="brand-mark" aria-hidden="true">▣</span>
+          <a href="#" class="brand" id="brandReset" title="Reset view to box 0">
+            <svg
+              class="brand-mark-svg"
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="none"
+              aria-hidden="true"
+            >
+              <rect x="1.5" y="1.5" width="17" height="17" rx="3" fill="currentColor" />
+              <path
+                d="M5.5 10.3L8.6 13.4L14.6 6.6"
+                stroke="var(--ink-on-fill)"
+                stroke-width="2.1"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
             <span class="brand-title">One Million Checkboxes</span>
           </a>
         </div>
 
         <div class="metrics-group" aria-label="Live board statistics">
-          <div class="checked-metric">
-            <span class="checked-count" id="checkedCount">0</span>
-            <span class="checked-label">checked</span>
+          <div class="counter-stack">
+            <div class="checked-metric">
+              <span class="checked-count" id="checkedCount">0</span>
+              <span class="checked-suffix">of 1,000,000 checked</span>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div class="progress-fill" id="checkedProgressFill"></div>
+            </div>
           </div>
-          <div class="online-pill" id="connectionPill" title="Connected users and server instance">
+
+          <div class="online-pill" id="connectionPill" title="Connected people">
             <span class="status-dot" id="statusDot" aria-hidden="true"></span>
             <span id="onlineCount">1</span>
-            <span class="online-label">online</span>
+            <span class="online-label">here now</span>
             <span class="instance-badge" id="instanceBadge" hidden>app1</span>
           </div>
         </div>
 
         <div class="controls-group">
-          <form class="goto-form" id="gotoForm" role="search" aria-label="Jump to checkbox number">
-            <label for="gotoInput" class="sr-only">Go to checkbox number</label>
-            <input
-              id="gotoInput"
-              class="goto-input"
-              type="number"
-              min="0"
-              max="999999"
-              step="1"
-              inputmode="numeric"
-              placeholder="Go to #…"
-            />
-            <button type="submit" class="btn btn-subtle goto-btn" title="Jump to checkbox">Go</button>
-          </form>
+          <div class="goto-popover-anchor">
+            <button
+              type="button"
+              class="btn btn-icon desktop-only"
+              id="gotoToggleBtn"
+              aria-label="Go to box"
+              aria-expanded="false"
+              aria-controls="gotoPopover"
+              title="Go to box (/)"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="7" cy="7" r="4.8" stroke="currentColor" stroke-width="1.6" />
+                <path
+                  d="M10.6 10.6L14 14"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+
+            <div class="goto-popover" id="gotoPopover" role="dialog" aria-label="Go to box" hidden>
+              <form class="goto-form" id="gotoForm" novalidate>
+                <label for="gotoInput" class="goto-label">Go to box</label>
+                <div class="goto-row">
+                  <input
+                    id="gotoInput"
+                    class="goto-input"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="Box number, 0 to 999,999"
+                  />
+                  <button type="submit" class="btn btn-primary goto-btn">Go</button>
+                </div>
+                <p class="goto-error" id="gotoError" hidden>Enter a number from 0 to 999,999.</p>
+              </form>
+            </div>
+          </div>
 
           <button
             type="button"
-            class="btn btn-icon"
+            class="btn btn-icon desktop-only"
             id="themeToggleBtn"
             aria-label="Toggle color theme"
-            title="Switch light/dark ledger theme"
+            title="Switch light or dark ledger theme"
           >
-            <span id="themeIcon" aria-hidden="true">◐</span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" />
+              <path d="M8 2A6 6 0 0 1 8 14V2Z" fill="currentColor" />
+            </svg>
           </button>
 
-          <div class="auth-slot" id="authSlot">
-            <a href="/auth/login" class="btn btn-primary" id="headerSignInBtn">Sign in</a>
-          </div>
+          <div class="auth-slot desktop-only" id="authSlot"></div>
+
+          <button
+            type="button"
+            class="btn btn-icon mobile-only"
+            id="mobileMenuBtn"
+            aria-label="Open menu"
+            aria-expanded="false"
+            aria-controls="mobileMenuSheet"
+            title="Menu"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M2.5 4.5H13.5M2.5 8H13.5M2.5 11.5H13.5"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -81,31 +148,103 @@
           aria-label="One Million Checkboxes grid, 1,000 rows by 1,000 columns. Use arrow keys to move focus and Space or Enter to toggle."
         ></canvas>
 
-        <div class="zoom-toolbar" aria-label="Zoom controls">
-          <button type="button" class="btn btn-icon" id="zoomInBtn" title="Zoom in (+)">+</button>
-          <button type="button" class="btn btn-subtle zoom-readout" id="zoomResetBtn" title="Reset zoom">
-            20px
+        <div class="zoom-toolbar" aria-label="Board navigation controls">
+          <button type="button" class="btn btn-icon" id="zoomOutBtn" title="Zoom out (-)" aria-label="Zoom out">
+            −
           </button>
-          <button type="button" class="btn btn-icon" id="zoomOutBtn" title="Zoom out (-)">−</button>
+          <button type="button" class="btn btn-subtle" id="zoomFitBtn" title="Fit whole sheet (0)">
+            Fit
+          </button>
+          <button type="button" class="btn btn-icon" id="zoomInBtn" title="Zoom in (+)" aria-label="Zoom in">
+            +
+          </button>
+          <button
+            type="button"
+            class="btn btn-subtle desktop-only"
+            id="findActivityBtn"
+            title="Jump to recent activity"
+          >
+            Find activity
+          </button>
         </div>
 
-        <aside class="minimap-card" id="minimapCard" aria-label="Board overview minimap">
-          <div class="minimap-header">
-            <span>Ledger overview</span>
-            <button
-              type="button"
-              class="minimap-collapse"
-              id="minimapToggleBtn"
-              aria-label="Toggle minimap"
-              title="Minimize or expand overview"
-            >
-              –
-            </button>
-          </div>
-          <div class="minimap-body" id="minimapBody">
-            <canvas id="minimapCanvas" width="200" height="200"></canvas>
+        <aside class="minimap-card" id="minimapCard" aria-label="Map">
+          <button
+            type="button"
+            class="btn btn-subtle minimap-pill-btn"
+            id="minimapExpandBtn"
+            hidden
+          >
+            Map
+          </button>
+          <div class="minimap-panel" id="minimapPanel">
+            <div class="minimap-header">
+              <span>Map</span>
+              <button
+                type="button"
+                class="minimap-collapse"
+                id="minimapToggleBtn"
+                aria-label="Collapse map"
+                title="Collapse map"
+              >
+                –
+              </button>
+            </div>
+            <div class="minimap-body" id="minimapBody">
+              <canvas id="minimapCanvas" width="200" height="200"></canvas>
+            </div>
           </div>
         </aside>
+
+        <div class="hint-card" id="firstVisitHint" role="status" hidden>
+          <span class="hint-text" id="firstVisitHintText">
+            Drag to move. Ctrl + scroll or pinch to zoom. Click a box to check it.
+          </span>
+          <button
+            type="button"
+            class="hint-close"
+            id="hintCloseBtn"
+            aria-label="Dismiss hint"
+            title="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="mobile-sheet" id="mobileMenuSheet" role="dialog" aria-label="Menu" hidden>
+          <div class="mobile-sheet-header">
+            <span class="mobile-sheet-title">One Million Checkboxes</span>
+            <button type="button" class="btn btn-icon" id="mobileMenuCloseBtn" aria-label="Close menu">
+              ×
+            </button>
+          </div>
+
+          <form class="mobile-goto-form" id="mobileGotoForm" novalidate>
+            <label for="mobileGotoInput" class="goto-label">Go to box</label>
+            <div class="goto-row">
+              <input
+                id="mobileGotoInput"
+                class="goto-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="Box number, 0 to 999,999"
+              />
+              <button type="submit" class="btn btn-primary">Go</button>
+            </div>
+            <p class="goto-error" id="mobileGotoError" hidden>Enter a number from 0 to 999,999.</p>
+          </form>
+
+          <div class="mobile-sheet-actions">
+            <button type="button" class="btn btn-subtle btn-block" id="mobileFindActivityBtn">
+              Find activity
+            </button>
+            <button type="button" class="btn btn-subtle btn-block" id="mobileThemeBtn">
+              Switch theme
+            </button>
+            <div id="mobileAuthSlot"></div>
+          </div>
+        </div>
 
         <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
         <div class="sr-only" id="a11yAnnouncer" aria-live="polite" aria-atomic="true"></div>
@@ -113,14 +252,10 @@
 
       <footer class="statusbar" role="contentinfo">
         <div class="status-left">
-          <span class="range-readout" id="rangeReadout">Viewing #0–#0</span>
-          <span class="status-sep" aria-hidden="true">·</span>
-          <span class="cell-readout" id="cellReadout">Cell #0</span>
+          <span class="range-readout" id="rangeReadout">Rows 0–0</span>
+          <span class="cell-readout" id="cellReadout">Box 0</span>
         </div>
-        <div class="status-right" id="statusCta">
-          <span class="status-note" id="statusMessage">You're viewing live. Sign in to check boxes.</span>
-          <a href="/auth/login" class="btn btn-primary btn-sm" id="footerSignInBtn">Sign in</a>
-        </div>
+        <div class="status-right" id="statusCta"></div>
       </footer>
     </div>
 
@@ -155,4 +290,3 @@
     <script type="module" src="/js/main.js"></script>
   </body>
 </html>
-

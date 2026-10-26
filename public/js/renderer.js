@@ -1,6 +1,11 @@
+import { DUR, easeInOut, easeOut, prefersReducedMotion } from './motion.js';
+
 const COLS = 1000;
 const ROWS = 1000;
 const TOTAL = COLS * ROWS;
+
+const GUTTER_LEFT_PX = 44;
+const DESK_PAD_PX = 20;
 
 const LIVE_PULSE_MS = 800;
 const OWN_PULSE_MS = 500;
@@ -18,6 +23,15 @@ function lerpColor(rgbA, rgbB, t) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+function roundedBoxPath(ctx, x, y, w, h, radius) {
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function' && radius > 0) {
+    ctx.roundRect(x, y, w, h, radius);
+  } else {
+    ctx.rect(x, y, w, h);
+  }
+}
+
 export class BoardRenderer {
   constructor(canvas, bitset, { onViewportChange } = {}) {
     this.canvas = canvas;
@@ -29,12 +43,13 @@ export class BoardRenderer {
     this.width = 1;
     this.height = 1;
 
-    // Camera state: top-left world coordinate in pixels, and cell size in CSS px
-    this.cellSize = window.innerWidth <= 640 ? 24 : 20;
-    this.minCellSize = 1;
+    this.defaultCellSize = window.innerWidth <= 640 ? 24 : 20;
+    this.fitCellSize = 0.5;
+    this.minCellSize = 0.5;
     this.maxCellSize = 36;
-    this.camX = 0;
-    this.camY = 0;
+    this.cellSize = this.defaultCellSize;
+    this.camX = -GUTTER_LEFT_PX;
+    this.camY = -DESK_PAD_PX;
 
     this.focusedIndex = 0;
     this.hoveredIndex = -1;
@@ -45,7 +60,8 @@ export class BoardRenderer {
     this.pulses = new Map();
     this.rafId = null;
 
-    this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Active camera animation state
+    this.camAnim = null;
 
     // Offscreen 1000x1000 bitmap for <4px overview mode
     this.overviewCanvas = document.createElement('canvas');
@@ -60,25 +76,40 @@ export class BoardRenderer {
 
   readThemePalette() {
     const styles = getComputedStyle(document.documentElement);
-    const paper = styles.getPropertyValue('--paper').trim() || '#EEF2F5';
-    const paperElevated = styles.getPropertyValue('--paper-elevated').trim() || '#F7F9FB';
-    const rule = styles.getPropertyValue('--rule').trim() || '#C9D3DC';
-    const ruleStrong = styles.getPropertyValue('--rule-strong').trim() || '#AAB8C6';
-    const ink = styles.getPropertyValue('--ink').trim() || '#1F2E4A';
-    const inkOnFill = styles.getPropertyValue('--ink-on-fill').trim() || '#F7F9FB';
-    const signal = styles.getPropertyValue('--signal').trim() || '#E2A400';
-    const live = styles.getPropertyValue('--live').trim() || '#3D7DD8';
+    const desk = styles.getPropertyValue('--desk').trim() || '#DCE5D7';
+    const paper = styles.getPropertyValue('--paper').trim() || '#EDF2EA';
+    const paperElevated = styles.getPropertyValue('--paper-elevated').trim() || '#F6F9F4';
+    const paperSubtle = styles.getPropertyValue('--paper-subtle').trim() || '#E2EADE';
+    const rule = styles.getPropertyValue('--rule').trim() || '#C9D8C4';
+    const ruleStrong = styles.getPropertyValue('--rule-strong').trim() || '#A9BFA3';
+    const box = styles.getPropertyValue('--box').trim() || '#6F8C78';
+    const ink = styles.getPropertyValue('--ink').trim() || '#1C2740';
+    const inkMuted = styles.getPropertyValue('--ink-muted').trim() || '#4F5F55';
+    const inkOnFill = styles.getPropertyValue('--ink-on-fill').trim() || '#F6F9F4';
+    const margin = styles.getPropertyValue('--margin').trim() || '#C0392B';
+    const signal = styles.getPropertyValue('--signal').trim() || '#E0A100';
+    const live = styles.getPropertyValue('--live').trim() || '#2F6FD0';
+
+    const paperRgb = parseHexRgb(paper);
+    const isDark = paperRgb[0] + paperRgb[1] + paperRgb[2] < 380;
 
     return {
+      desk,
       paper,
       paperElevated,
+      paperSubtle,
       rule,
       ruleStrong,
+      box,
       ink,
+      inkMuted,
       inkOnFill,
+      margin,
       signal,
       live,
-      paperRgb: parseHexRgb(paper),
+      isDark,
+      shadowColor: isDark ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.12)',
+      paperRgb,
       inkRgb: parseHexRgb(ink),
       liveRgb: parseHexRgb(live),
       signalRgb: parseHexRgb(signal),
@@ -98,6 +129,13 @@ export class BoardRenderer {
     this.height = Math.max(1, Math.floor(rect.height));
     this.canvas.width = Math.floor(this.width * this.dpr);
     this.canvas.height = Math.floor(this.height * this.dpr);
+
+    this.fitCellSize = Math.max(0.15, Math.min(this.width - 88, this.height - 48) / COLS);
+    this.minCellSize = this.fitCellSize;
+    if (this.cellSize < this.minCellSize) {
+      this.cellSize = this.minCellSize;
+    }
+
     this.clampCamera();
     this.requestFullRedraw();
   }
@@ -105,16 +143,26 @@ export class BoardRenderer {
   clampCamera() {
     const worldW = COLS * this.cellSize;
     const worldH = ROWS * this.cellSize;
-    if (worldW <= this.width) {
-      this.camX = -(this.width - worldW) / 2;
+    const minX = -GUTTER_LEFT_PX;
+    const maxX = worldW - this.width + DESK_PAD_PX;
+
+    if (worldW + GUTTER_LEFT_PX + DESK_PAD_PX <= this.width) {
+      this.camX = -((this.width - worldW - GUTTER_LEFT_PX + DESK_PAD_PX) / 2 + GUTTER_LEFT_PX);
     } else {
-      this.camX = Math.max(0, Math.min(worldW - this.width, this.camX));
+      this.camX = Math.max(minX, Math.min(maxX, this.camX));
     }
-    if (worldH <= this.height) {
+
+    const minY = -DESK_PAD_PX;
+    const maxY = worldH - this.height + DESK_PAD_PX;
+    if (worldH + DESK_PAD_PX * 2 <= this.height) {
       this.camY = -(this.height - worldH) / 2;
     } else {
-      this.camY = Math.max(0, Math.min(worldH - this.height, this.camY));
+      this.camY = Math.max(minY, Math.min(maxY, this.camY));
     }
+  }
+
+  cancelAnimation() {
+    this.camAnim = null;
   }
 
   panBy(dx, dy) {
@@ -124,43 +172,137 @@ export class BoardRenderer {
     this.requestFullRedraw();
   }
 
-  setZoomAt(newCellSize, screenX = this.width / 2, screenY = this.height / 2) {
+  getViewportCenterCell() {
+    return {
+      centerX: (this.camX + this.width / 2) / this.cellSize,
+      centerY: (this.camY + this.height / 2) / this.cellSize,
+    };
+  }
+
+  applyCameraForCenter(cellSize, centerX, centerY) {
+    this.cellSize = Math.max(this.minCellSize, Math.min(this.maxCellSize, cellSize));
+    this.camX = centerX * this.cellSize - this.width / 2;
+    this.camY = centerY * this.cellSize - this.height / 2;
+    this.clampCamera();
+  }
+
+  animateTo(
+    { cellSize = this.cellSize, centerX, centerY } = {},
+    durationMs = DUR.base,
+  ) {
+    const targetSize = Math.max(this.minCellSize, Math.min(this.maxCellSize, cellSize));
+    const curCenter = this.getViewportCenterCell();
+    const toCenterX = centerX !== undefined ? centerX : curCenter.centerX;
+    const toCenterY = centerY !== undefined ? centerY : curCenter.centerY;
+
+    if (prefersReducedMotion() || durationMs <= 0) {
+      this.cancelAnimation();
+      this.applyCameraForCenter(targetSize, toCenterX, toCenterY);
+      this.requestFullRedraw();
+      return;
+    }
+
+    this.camAnim = {
+      kind: 'center',
+      startMs: performance.now(),
+      durationMs,
+      fromLogSize: Math.log(this.cellSize),
+      toLogSize: Math.log(targetSize),
+      fromCenterX: curCenter.centerX,
+      fromCenterY: curCenter.centerY,
+      toCenterX,
+      toCenterY,
+    };
+    this.scheduleFrame();
+  }
+
+  fitToScreen({ animate = true } = {}) {
+    if (!animate || prefersReducedMotion()) {
+      this.cancelAnimation();
+      this.applyCameraForCenter(this.fitCellSize, COLS / 2, ROWS / 2);
+      this.requestFullRedraw();
+      return;
+    }
+    this.animateTo(
+      { cellSize: this.fitCellSize, centerX: COLS / 2, centerY: ROWS / 2 },
+      DUR.base,
+    );
+  }
+
+  setZoomAt(
+    newCellSize,
+    screenX = this.width / 2,
+    screenY = this.height / 2,
+    { animate = false, durationMs = DUR.fast } = {},
+  ) {
     const clamped = Math.max(this.minCellSize, Math.min(this.maxCellSize, newCellSize));
-    if (Math.abs(clamped - this.cellSize) < 0.01) return;
+    if (Math.abs(clamped - this.cellSize) < 0.005 && !this.camAnim) return;
 
     const worldCol = (this.camX + screenX) / this.cellSize;
     const worldRow = (this.camY + screenY) / this.cellSize;
 
-    this.cellSize = clamped >= 4 ? Math.round(clamped) : Number(clamped.toFixed(2));
-    this.camX = worldCol * this.cellSize - screenX;
-    this.camY = worldRow * this.cellSize - screenY;
-    this.clampCamera();
-    this.requestFullRedraw();
+    if (!animate || prefersReducedMotion() || durationMs <= 0) {
+      this.cancelAnimation();
+      this.cellSize = clamped;
+      this.camX = worldCol * this.cellSize - screenX;
+      this.camY = worldRow * this.cellSize - screenY;
+      this.clampCamera();
+      this.requestFullRedraw();
+      return;
+    }
+
+    const baseTarget = this.camAnim?.kind === 'anchor' ? Math.exp(this.camAnim.toLogSize) : this.cellSize;
+    const target = Math.max(
+      this.minCellSize,
+      Math.min(this.maxCellSize, newCellSize),
+    );
+    void baseTarget;
+
+    this.camAnim = {
+      kind: 'anchor',
+      startMs: performance.now(),
+      durationMs,
+      fromLogSize: Math.log(this.cellSize),
+      toLogSize: Math.log(target),
+      worldCol,
+      worldRow,
+      screenX,
+      screenY,
+    };
+    this.scheduleFrame();
   }
 
-  centerOnIndex(index, { focus = true, pulse = false } = {}) {
+  centerOnIndex(index, { focus = true, pulse = false, animate = true, durationMs = DUR.base } = {}) {
     const safeIdx = Math.max(0, Math.min(TOTAL - 1, Math.floor(index)));
     const row = Math.floor(safeIdx / COLS);
     const col = safeIdx % COLS;
-
-    if (this.cellSize < 16) {
-      this.cellSize = 20;
-    }
-
-    this.camX = (col + 0.5) * this.cellSize - this.width / 2;
-    this.camY = (row + 0.5) * this.cellSize - this.height / 2;
-    this.clampCamera();
+    const targetCellSize = this.cellSize < 16 ? this.defaultCellSize : this.cellSize;
 
     if (focus) {
       this.focusedIndex = safeIdx;
     }
-    if (pulse) {
+    if (pulse && !prefersReducedMotion()) {
       this.markCellUpdated(safeIdx, 'own');
     }
-    this.requestFullRedraw();
+
+    if (animate && !prefersReducedMotion() && durationMs > 0) {
+      this.animateTo(
+        {
+          cellSize: targetCellSize,
+          centerX: col + 0.5,
+          centerY: row + 0.5,
+        },
+        durationMs,
+      );
+    } else {
+      this.cancelAnimation();
+      this.applyCameraForCenter(targetCellSize, col + 0.5, row + 0.5);
+      this.requestFullRedraw();
+    }
   }
 
   ensureIndexVisible(index) {
+    this.cancelAnimation();
     const row = Math.floor(index / COLS);
     const col = index % COLS;
     const x = col * this.cellSize;
@@ -210,7 +352,7 @@ export class BoardRenderer {
 
   markCellUpdated(index, kind = 'live') {
     this.updateOverviewPixel(index);
-    if (!this.reducedMotion && kind) {
+    if (!prefersReducedMotion() && kind) {
       this.pulses.set(index, { kind, startMs: performance.now() });
     }
     this.dirtyCells.add(index);
@@ -227,6 +369,16 @@ export class BoardRenderer {
     }
   }
 
+  setHoveredIndex(index) {
+    const next = index >= 0 && index < TOTAL ? index : -1;
+    if (next === this.hoveredIndex) return;
+    const prev = this.hoveredIndex;
+    this.hoveredIndex = next;
+    if (prev >= 0) this.dirtyCells.add(prev);
+    if (next >= 0) this.dirtyCells.add(next);
+    this.scheduleFrame();
+  }
+
   requestFullRedraw() {
     this.fullDirty = true;
     this.scheduleFrame();
@@ -238,6 +390,36 @@ export class BoardRenderer {
       this.rafId = null;
       this.render(nowMs);
     });
+  }
+
+  stepCameraAnimation(nowMs) {
+    if (!this.camAnim) return;
+    const anim = this.camAnim;
+    const rawT = (nowMs - anim.startMs) / anim.durationMs;
+    const done = rawT >= 1;
+    const t = anim.kind === 'anchor' ? easeOut(rawT) : easeInOut(rawT);
+
+    const logSize = anim.fromLogSize + (anim.toLogSize - anim.fromLogSize) * t;
+    const nextSize = Math.exp(logSize);
+
+    if (anim.kind === 'anchor') {
+      this.cellSize = nextSize;
+      this.camX = anim.worldCol * this.cellSize - anim.screenX;
+      this.camY = anim.worldRow * this.cellSize - anim.screenY;
+      this.clampCamera();
+    } else {
+      const cx = anim.fromCenterX + (anim.toCenterX - anim.fromCenterX) * t;
+      const cy = anim.fromCenterY + (anim.toCenterY - anim.fromCenterY) * t;
+      this.applyCameraForCenter(nextSize, cx, cy);
+    }
+
+    if (done) {
+      if (this.cellSize >= 4) {
+        this.cellSize = Math.round(this.cellSize * 100) / 100;
+      }
+      this.camAnim = null;
+    }
+    this.fullDirty = true;
   }
 
   rebuildOverviewImage() {
@@ -285,6 +467,10 @@ export class BoardRenderer {
   }
 
   render(nowMs = performance.now()) {
+    if (this.camAnim) {
+      this.stepCameraAnimation(nowMs);
+    }
+
     const ctx = this.ctx;
     ctx.save();
     ctx.scale(this.dpr, this.dpr);
@@ -300,7 +486,6 @@ export class BoardRenderer {
       this.fullDirty = false;
       this.dirtyCells.clear();
     } else {
-      // Redraw only dirty and pulsing cells
       for (const idx of this.pulses.keys()) {
         this.dirtyCells.add(idx);
       }
@@ -325,8 +510,76 @@ export class BoardRenderer {
       this.onViewportChange(bounds, this.cellSize);
     }
 
-    if (this.pulses.size > 0) {
+    if (this.pulses.size > 0 || this.camAnim) {
       this.scheduleFrame();
+    }
+  }
+
+  drawDeskAndSheet(ctx) {
+    const cs = this.cellSize;
+    const sheetX = -this.camX;
+    const sheetY = -this.camY;
+    const sheetW = COLS * cs;
+    const sheetH = ROWS * cs;
+
+    // 1. Desk surface outside the sheet
+    ctx.fillStyle = this.palette.desk;
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    // 2. Physical paper sheet with soft drop shadow
+    ctx.save();
+    ctx.shadowColor = this.palette.shadowColor;
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = this.palette.paper;
+    ctx.fillRect(
+      Math.max(-30, sheetX),
+      Math.max(-30, sheetY),
+      Math.min(this.width + 60, sheetW),
+      Math.min(this.height + 60, sheetH),
+    );
+    ctx.restore();
+
+    // 3. Red double margin line: two 1px --margin lines, 3px apart, 6px left of sheet's left edge
+    const line1X = Math.floor(sheetX - 6) + 0.5;
+    const line2X = Math.floor(sheetX - 9) + 0.5;
+    const topY = Math.max(0, sheetY);
+    const botY = Math.min(this.height, sheetY + sheetH);
+
+    if (line1X >= -10 && line2X <= this.width + 10 && botY > topY) {
+      ctx.strokeStyle = this.palette.margin;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(line1X, topY);
+      ctx.lineTo(line1X, botY);
+      ctx.moveTo(line2X, topY);
+      ctx.lineTo(line2X, botY);
+      ctx.stroke();
+    }
+  }
+
+  drawRowNumbers(ctx, bounds) {
+    const cs = this.cellSize;
+    if (cs < 4) return;
+
+    const sheetX = -this.camX;
+    const labelX = Math.floor(sheetX - 13);
+    if (labelX < 4 || labelX > this.width + 40) return;
+
+    const step = cs >= 16 ? 1 : 10;
+    const startRow = Math.ceil(bounds.rowStart / step) * step;
+
+    ctx.fillStyle = this.palette.inkMuted;
+    ctx.font = '450 11px "Bricolage Grotesque", system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    for (let r = startRow; r <= bounds.rowEnd; r += step) {
+      const centerY = (r + 0.5) * cs - this.camY;
+      if (centerY >= -10 && centerY <= this.height + 10) {
+        ctx.fillText(String(r), labelX, centerY);
+      }
     }
   }
 
@@ -334,8 +587,7 @@ export class BoardRenderer {
     if (this.overviewDirty) {
       this.rebuildOverviewImage();
     }
-    ctx.fillStyle = this.palette.paper;
-    ctx.fillRect(0, 0, this.width, this.height);
+    this.drawDeskAndSheet(ctx);
 
     ctx.imageSmoothingEnabled = false;
     const destX = -this.camX;
@@ -347,27 +599,47 @@ export class BoardRenderer {
 
   renderFullViewport(ctx, bounds, nowMs) {
     const cs = this.cellSize;
-    const { paper, rule } = this.palette;
+    this.drawDeskAndSheet(ctx);
 
-    ctx.fillStyle = paper;
-    ctx.fillRect(0, 0, this.width, this.height);
+    const sheetLeft = Math.max(0, -this.camX);
+    const sheetRight = Math.min(this.width, COLS * cs - this.camX);
+    const sheetTop = Math.max(0, -this.camY);
+    const sheetBottom = Math.min(this.height, ROWS * cs - this.camY);
 
-    // Draw ruled ledger grid lines
-    ctx.strokeStyle = rule;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
+    // Ledger rules (only when cellSize >= 8):
+    // - Horizontal rules on every row in --rule, and every 10th row in --rule-strong
+    // - Faint vertical rule only every 10 columns in --rule
+    if (cs >= 8) {
+      ctx.lineWidth = 1;
 
-    for (let c = bounds.colStart; c <= bounds.colEnd + 1; c++) {
-      const x = Math.floor(c * cs - this.camX) + 0.5;
-      ctx.moveTo(x, Math.max(0, bounds.rowStart * cs - this.camY));
-      ctx.lineTo(x, Math.min(this.height, (bounds.rowEnd + 1) * cs - this.camY));
+      // Normal horizontal rules + 10th-column vertical rules in --rule
+      ctx.strokeStyle = this.palette.rule;
+      ctx.beginPath();
+      for (let r = bounds.rowStart; r <= bounds.rowEnd + 1; r++) {
+        if (r % 10 === 0) continue;
+        const y = Math.floor(r * cs - this.camY) + 0.5;
+        ctx.moveTo(sheetLeft, y);
+        ctx.lineTo(sheetRight, y);
+      }
+      const firstTenthCol = Math.ceil(bounds.colStart / 10) * 10;
+      for (let c = firstTenthCol; c <= bounds.colEnd + 1; c += 10) {
+        const x = Math.floor(c * cs - this.camX) + 0.5;
+        ctx.moveTo(x, sheetTop);
+        ctx.lineTo(x, sheetBottom);
+      }
+      ctx.stroke();
+
+      // Every 10th horizontal rule in --rule-strong
+      ctx.strokeStyle = this.palette.ruleStrong;
+      ctx.beginPath();
+      const firstTenthRow = Math.ceil(bounds.rowStart / 10) * 10;
+      for (let r = firstTenthRow; r <= bounds.rowEnd + 1; r += 10) {
+        const y = Math.floor(r * cs - this.camY) + 0.5;
+        ctx.moveTo(sheetLeft, y);
+        ctx.lineTo(sheetRight, y);
+      }
+      ctx.stroke();
     }
-    for (let r = bounds.rowStart; r <= bounds.rowEnd + 1; r++) {
-      const y = Math.floor(r * cs - this.camY) + 0.5;
-      ctx.moveTo(Math.max(0, bounds.colStart * cs - this.camX), y);
-      ctx.lineTo(Math.min(this.width, (bounds.colEnd + 1) * cs - this.camX), y);
-    }
-    ctx.stroke();
 
     // Draw visible cells
     for (let r = bounds.rowStart; r <= bounds.rowEnd; r++) {
@@ -377,25 +649,51 @@ export class BoardRenderer {
         const checked = this.bitset.get(idx);
         const hasPulse = this.pulses.has(idx);
         const isFocused = idx === this.focusedIndex;
+        const isHovered = idx === this.hoveredIndex;
 
-        if (cs >= 16 || checked || hasPulse || isFocused) {
+        if (cs >= 16 || checked || hasPulse || isFocused || isHovered) {
           this.drawCellInterior(ctx, r, c, idx, checked, nowMs);
         }
       }
     }
+
+    this.drawRowNumbers(ctx, bounds);
   }
 
   drawSingleCell(ctx, row, col, idx, nowMs) {
     const cs = this.cellSize;
     const x = Math.floor(col * cs - this.camX);
     const y = Math.floor(row * cs - this.camY);
+    const w = Math.ceil(cs);
+    const h = Math.ceil(cs);
 
     ctx.fillStyle = this.palette.paper;
-    ctx.fillRect(x, y, cs, cs);
+    ctx.fillRect(x, y, w, h);
 
-    ctx.strokeStyle = this.palette.rule;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, cs, cs);
+    if (cs >= 8) {
+      // Restore top and bottom horizontal ledger rules for this cell
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = row % 10 === 0 ? this.palette.ruleStrong : this.palette.rule;
+      ctx.beginPath();
+      ctx.moveTo(x, Math.floor(row * cs - this.camY) + 0.5);
+      ctx.lineTo(x + w, Math.floor(row * cs - this.camY) + 0.5);
+      ctx.stroke();
+
+      const nextRow = row + 1;
+      ctx.strokeStyle = nextRow % 10 === 0 ? this.palette.ruleStrong : this.palette.rule;
+      ctx.beginPath();
+      ctx.moveTo(x, Math.floor(nextRow * cs - this.camY) + 0.5);
+      ctx.lineTo(x + w, Math.floor(nextRow * cs - this.camY) + 0.5);
+      ctx.stroke();
+
+      if (col % 10 === 0) {
+        ctx.strokeStyle = this.palette.rule;
+        ctx.beginPath();
+        ctx.moveTo(Math.floor(col * cs - this.camX) + 0.5, y);
+        ctx.lineTo(Math.floor(col * cs - this.camX) + 0.5, y + h);
+        ctx.stroke();
+      }
+    }
 
     const checked = this.bitset.get(idx);
     this.drawCellInterior(ctx, row, col, idx, checked, nowMs);
@@ -406,12 +704,17 @@ export class BoardRenderer {
     const x = Math.floor(col * cs - this.camX);
     const y = Math.floor(row * cs - this.camY);
 
+    if (idx === this.hoveredIndex) {
+      ctx.fillStyle = this.palette.paperSubtle;
+      ctx.fillRect(x + 1, y + 1, Math.max(1, Math.floor(cs) - 1), Math.max(1, Math.floor(cs) - 1));
+    }
+
     let fillColor = checked ? this.palette.ink : null;
     const pulse = this.pulses.get(idx);
     if (pulse) {
       const duration = pulse.kind === 'own' ? OWN_PULSE_MS : LIVE_PULSE_MS;
       const t = (nowMs - pulse.startMs) / duration;
-      if (t >= 1) {
+      if (t >= 1 || prefersReducedMotion()) {
         this.pulses.delete(idx);
       } else {
         const startRgb = pulse.kind === 'own' ? this.palette.signalRgb : this.palette.liveRgb;
@@ -422,29 +725,41 @@ export class BoardRenderer {
 
     if (cs < 16) {
       if (fillColor) {
+        const pad = cs >= 8 ? 1 : 0;
         ctx.fillStyle = fillColor;
-        ctx.fillRect(x + 1, y + 1, Math.max(1, cs - 1), Math.max(1, cs - 1));
+        ctx.fillRect(
+          x + pad,
+          y + pad,
+          Math.max(1, Math.floor(cs) - pad * 2),
+          Math.max(1, Math.floor(cs) - pad * 2),
+        );
       }
     } else {
-      const pad = Math.max(2, Math.floor(cs * 0.16));
+      // D3: Inset box is 62% of the cell: pad = Math.round(cs * 0.19)
+      const pad = Math.round(cs * 0.19);
       const boxX = x + pad;
       const boxY = y + pad;
-      const boxS = cs - pad * 2;
+      const boxS = Math.max(4, Math.round(cs) - pad * 2);
+      const radius = Math.min(3, cs * 0.12);
 
       if (fillColor) {
         ctx.fillStyle = fillColor;
-        ctx.fillRect(boxX, boxY, boxS, boxS);
+        roundedBoxPath(ctx, boxX, boxY, boxS, boxS, radius);
+        ctx.fill();
       } else {
         ctx.fillStyle = this.palette.paperElevated;
-        ctx.fillRect(boxX, boxY, boxS, boxS);
-        ctx.strokeStyle = this.palette.ruleStrong;
-        ctx.lineWidth = 1.25;
-        ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxS - 1, boxS - 1);
+        roundedBoxPath(ctx, boxX, boxY, boxS, boxS, radius);
+        ctx.fill();
+
+        ctx.strokeStyle = this.palette.box;
+        ctx.lineWidth = 1;
+        roundedBoxPath(ctx, boxX + 0.5, boxY + 0.5, boxS - 1, boxS - 1, radius);
+        ctx.stroke();
       }
 
       if (checked) {
         ctx.strokeStyle = this.palette.inkOnFill;
-        ctx.lineWidth = Math.max(1.6, cs * 0.09);
+        ctx.lineWidth = Math.max(1.5, cs * 0.085);
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.beginPath();
@@ -455,11 +770,10 @@ export class BoardRenderer {
       }
     }
 
-    if (idx === this.focusedIndex) {
+    if (idx === this.focusedIndex && cs >= 4) {
       ctx.strokeStyle = this.palette.signal;
       ctx.lineWidth = 2;
-      ctx.strokeRect(x + 1.5, y + 1.5, cs - 2, cs - 2);
+      ctx.strokeRect(x + 1.5, y + 1.5, Math.round(cs) - 3, Math.round(cs) - 3);
     }
   }
 }
-

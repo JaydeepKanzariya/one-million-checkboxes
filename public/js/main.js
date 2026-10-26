@@ -1,7 +1,9 @@
 import { fetchBoardSnapshot, fetchMe, postLogout } from './api.js';
 import { BitSet } from './bitset.js';
+import { ClickBudget } from './clickBudget.js';
 import { attachBoardInput } from './input.js';
 import { Minimap } from './minimap.js';
+import { DUR, prefersReducedMotion } from './motion.js';
 import { REJECT_CODE } from './protocol.js';
 import { BoardRenderer } from './renderer.js';
 import { Sequencer } from './sequencer.js';
@@ -18,11 +20,82 @@ const minimapCanvas = document.getElementById('minimapCanvas');
 const pendingToggles = new Map();
 
 let snapshotLoaded = false;
+let firstSnapshotDone = false;
 const preSnapshotBuffer = []; // buffered { seq, index, value } while snapshot is loading
+
+// Rolling buffer of the last 500 remote updates { index, ts } for Find activity
+const recentRemoteUpdates = [];
+
+const budget = new ClickBudget({ capacity: 10, refillPerSec: 5 });
 
 let minimap = null;
 
+function pruneRecentUpdates(now = Date.now()) {
+  const cutoff = now - 60_000;
+  while (recentRemoteUpdates.length > 0 && recentRemoteUpdates[0].ts < cutoff) {
+    recentRemoteUpdates.shift();
+  }
+}
+
+function recordRemoteUpdate(index) {
+  const now = Date.now();
+  recentRemoteUpdates.push({ index, ts: now });
+  if (recentRemoteUpdates.length > 500) {
+    recentRemoteUpdates.shift();
+  }
+  pruneRecentUpdates(now);
+  ui.setFindActivityAvailable(recentRemoteUpdates.length > 0);
+  minimap?.addBlip(index);
+}
+
+function findActivity() {
+  const now = Date.now();
+  pruneRecentUpdates(now);
+  if (recentRemoteUpdates.length === 0) {
+    ui.setFindActivityAvailable(false);
+    return;
+  }
+
+  const blockCounts = new Map();
+  let bestKey = null;
+  let bestCount = 0;
+
+  for (let i = 0; i < recentRemoteUpdates.length; i++) {
+    const idx = recentRemoteUpdates[i].index;
+    const row = Math.floor(idx / 1000);
+    const col = idx % 1000;
+    const bRow = Math.floor(row / 50);
+    const bCol = Math.floor(col / 50);
+    const key = bRow * 20 + bCol;
+    const nextCount = (blockCounts.get(key) || 0) + 1;
+    blockCounts.set(key, nextCount);
+    if (nextCount >= bestCount) {
+      bestCount = nextCount;
+      bestKey = key;
+    }
+  }
+
+  if (bestKey === null) return;
+  const bestRow = Math.floor(bestKey / 20);
+  const bestCol = bestKey % 20;
+  const centerX = bestCol * 50 + 25;
+  const centerY = bestRow * 50 + 25;
+  const focusIdx = Math.min(999, centerY) * 1000 + Math.min(999, centerX);
+
+  renderer.focusedIndex = focusIdx;
+  ui.updateCellReadout(focusIdx);
+  renderer.animateTo(
+    {
+      cellSize: Math.max(renderer.cellSize, 20),
+      centerX,
+      centerY,
+    },
+    DUR.base
+  );
+}
+
 const ui = new UIController({
+  budget,
   onThemeChange() {
     renderer.refreshTheme();
     minimap?.forceRebuild();
@@ -30,14 +103,22 @@ const ui = new UIController({
   async onLogout() {
     await postLogout();
     ui.setAuthState({ authenticated: false, user: null });
-    ui.showToast('Signed out. Viewing in read-only mode.');
+    ui.showToast('Signed out. Watching live.');
   },
   onJumpTo(index) {
-    renderer.centerOnIndex(index, { focus: true, pulse: true });
+    renderer.centerOnIndex(index, { focus: true, pulse: true, animate: true });
     ui.updateCellReadout(index);
     history.replaceState(null, '', `#${index}`);
   },
+  onFindActivity() {
+    findActivity();
+  },
 });
+
+setInterval(() => {
+  pruneRecentUpdates();
+  ui.setFindActivityAvailable(recentRemoteUpdates.length > 0);
+}, 5_000);
 
 const renderer = new BoardRenderer(canvas, bitset, {
   onViewportChange(bounds, cellSize) {
@@ -84,6 +165,7 @@ const sequencer = new Sequencer({
         renderer.markCellUpdated(index, 'live');
         ui.setCheckedCount(bitset.checkedCount);
         minimap.markDirty();
+        recordRemoteUpdate(index);
       }
     }
     reconcilePendingAfterSeqAdvance();
@@ -140,6 +222,27 @@ async function fetchAndApplySnapshot() {
     ui.setCheckedCount(bitset.checkedCount);
     renderer.markSnapshotLoaded();
     minimap.forceRebuild();
+
+    if (!firstSnapshotDone) {
+      firstSnapshotDone = true;
+      const hashIdx = parseHashIndex();
+      const targetIdx = hashIdx !== null ? hashIdx : 0;
+      const targetRow = Math.floor(targetIdx / 1000);
+      const targetCol = targetIdx % 1000;
+      renderer.focusedIndex = targetIdx;
+      ui.updateCellReadout(targetIdx);
+      renderer.animateTo(
+        {
+          cellSize: renderer.defaultCellSize,
+          centerX: targetCol + 0.5,
+          centerY: targetRow + 0.5,
+        },
+        900
+      );
+      if (hashIdx !== null && !prefersReducedMotion()) {
+        renderer.markCellUpdated(hashIdx, 'own');
+      }
+    }
   } catch (err) {
     console.error('Snapshot load error:', err);
     ui.showToast("Couldn't load the board.", {
@@ -159,7 +262,7 @@ const socket = new RealtimeSocket({
   onOpen({ wasReconnect }) {
     ui.setConnectionState('online');
     if (wasReconnect) {
-      ui.showToast('Back online. Board is up to date.', { durationMs: 2500 });
+      ui.showToast('Back online.', { durationMs: 2500 });
     }
   },
 
@@ -214,12 +317,17 @@ const socket = new RealtimeSocket({
 
     if (code === REJECT_CODE.AUTH) {
       ui.setAuthState({ authenticated: false, user: null });
-      ui.showToast("You're viewing live. Sign in to check boxes.", {
+      ui.showToast("You're watching live. Sign in to check boxes.", {
         actionLabel: 'Sign in',
         onAction: () => ui.openSignInFlow(),
       });
-    } else if (code === REJECT_CODE.RANGE) {
-      ui.showToast('Checkbox index is out of range.', { alert: true });
+    } else if (code === REJECT_CODE.RATE) {
+      budget.drain();
+      ui.syncBudget();
+      ui.shakeBudget();
+      ui.announce('Slow down. Clicks refill in a moment.');
+    } else if (code === REJECT_CODE.BLOCKED) {
+      ui.startCooldown(120_000, 'blocked');
     }
   },
 
@@ -229,6 +337,13 @@ const socket = new RealtimeSocket({
       if (typeof msg.online === 'number') ui.setOnlineCount(msg.online);
       if (typeof msg.checked === 'number' && snapshotLoaded && pendingToggles.size === 0) {
         ui.setCheckedCount(msg.checked);
+      }
+      if (msg.limits) {
+        budget.configure({
+          capacity: msg.limits.bucketCapacity,
+          refillPerSec: msg.limits.bucketRefillPerS,
+        });
+        ui.syncBudget();
       }
       if (msg.user) {
         ui.setAuthState({ authenticated: true, user: msg.user });
@@ -241,17 +356,17 @@ const socket = new RealtimeSocket({
     } else if (msg.t === 'resync') {
       loadSnapshot();
     } else if (msg.t === 'limit') {
-      const secs = Math.max(1, Math.ceil((msg.retryAfterMs || 1000) / 1000));
       if (msg.reason === 'blocked') {
         ui.startCooldown(msg.retryAfterMs || 120_000, 'blocked');
-        ui.showToast('Paused for 2 minutes after too many rapid clicks.', { alert: true });
       } else {
-        ui.startCooldown(msg.retryAfterMs || 1000, 'rate');
-        ui.showToast(`Slow down — you can check more boxes in ${secs}s.`, { alert: true });
+        budget.drain();
+        ui.syncBudget();
+        ui.shakeBudget();
+        ui.announce('Slow down. Clicks refill in a moment.');
       }
     } else if (msg.t === 'session_expired') {
       ui.setAuthState({ authenticated: false, user: null });
-      ui.showToast('Your session ended. Sign in again to keep checking.', {
+      ui.showToast('Session ended. Sign in again.', {
         alert: true,
         actionLabel: 'Sign in',
         onAction: () => ui.openSignInFlow(),
@@ -261,8 +376,10 @@ const socket = new RealtimeSocket({
 });
 
 function handleToggleCell(index) {
+  ui.dismissHint();
+
   if (!ui.authState.authenticated) {
-    ui.showToast("You're viewing live. Sign in to check boxes.", {
+    ui.showToast("You're watching live. Sign in to check boxes.", {
       actionLabel: 'Sign in',
       onAction: () => ui.openSignInFlow(),
     });
@@ -270,10 +387,17 @@ function handleToggleCell(index) {
   }
 
   if (ui.cooldownUntilMs > Date.now()) {
-    const secs = Math.max(1, Math.ceil((ui.cooldownUntilMs - Date.now()) / 1000));
-    ui.showToast(`Slow down — you can check more boxes in ${secs}s.`, { alert: true });
+    ui.shakeBudget();
     return;
   }
+
+  if (!budget.consume()) {
+    ui.syncBudget();
+    ui.shakeBudget();
+    ui.announce('Slow down. Clicks refill in a moment.');
+    return;
+  }
+  ui.syncBudget();
 
   const current = bitset.get(index);
   const desired = current ? 0 : 1;
@@ -306,24 +430,32 @@ function handleToggleCell(index) {
     return;
   }
 
-  ui.announce(`Checkbox ${formatNum(index)} ${desired ? 'checked' : 'unchecked'}`);
+  ui.announce(`Box ${formatNum(index)} ${desired ? 'checked' : 'unchecked'}`);
 }
 
 function initZoomButtons() {
   document.getElementById('zoomInBtn')?.addEventListener('click', () => {
-    const step = renderer.cellSize < 4 ? 2 : 4;
-    renderer.setZoomAt(renderer.cellSize + step);
+    ui.dismissHint();
+    const next = renderer.cellSize < 4 ? 4 : renderer.cellSize * 1.25;
+    renderer.animateTo({ cellSize: next }, DUR.fast);
   });
   document.getElementById('zoomOutBtn')?.addEventListener('click', () => {
-    const step = renderer.cellSize <= 4 ? 1.5 : 4;
-    renderer.setZoomAt(renderer.cellSize - step);
+    ui.dismissHint();
+    const next =
+      renderer.cellSize <= 4
+        ? renderer.fitCellSize
+        : Math.max(renderer.fitCellSize, renderer.cellSize / 1.25);
+    renderer.animateTo({ cellSize: next }, DUR.fast);
   });
-  document.getElementById('zoomResetBtn')?.addEventListener('click', () => {
-    renderer.setZoomAt(20);
+  document.getElementById('zoomFitBtn')?.addEventListener('click', () => {
+    ui.dismissHint();
+    renderer.fitToScreen({ animate: true });
   });
   document.getElementById('brandReset')?.addEventListener('click', (e) => {
     e.preventDefault();
-    renderer.centerOnIndex(0, { focus: true });
+    ui.dismissHint();
+    renderer.centerOnIndex(0, { focus: true, animate: true });
+    ui.updateCellReadout(0);
     history.replaceState(null, '', window.location.pathname);
   });
 }
@@ -338,26 +470,25 @@ function parseHashIndex() {
 
 async function boot() {
   renderer.resize();
+  renderer.fitToScreen({ animate: false });
   window.addEventListener('resize', () => renderer.resize());
 
   initZoomButtons();
   attachBoardInput(canvas, renderer, {
     onToggleCell: handleToggleCell,
     onCellFocus: (idx) => ui.updateCellReadout(idx),
+    onFirstInteract: () => ui.dismissHint(),
+    onOpenGoto: () => ui.openGotoPopover(),
+    onEscape: () => ui.closeAllPopovers(),
   });
 
   const hashIdx = parseHashIndex();
-  if (hashIdx !== null) {
-    renderer.centerOnIndex(hashIdx, { focus: true });
-    ui.updateCellReadout(hashIdx);
-  } else {
-    ui.updateCellReadout(0);
-  }
+  ui.updateCellReadout(hashIdx !== null ? hashIdx : 0);
 
   window.addEventListener('hashchange', () => {
     const idx = parseHashIndex();
     if (idx !== null) {
-      renderer.centerOnIndex(idx, { focus: true, pulse: true });
+      renderer.centerOnIndex(idx, { focus: true, pulse: true, animate: true });
       ui.updateCellReadout(idx);
     }
   });

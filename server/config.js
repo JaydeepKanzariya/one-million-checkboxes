@@ -82,9 +82,6 @@ if (isProd) {
   if (devLogin) errors.push('DEV_LOGIN must be false in production');
 }
 
-const boardSize = int('BOARD_SIZE', 1_000_000, { min: 8, max: 100_000_000 });
-const boardCols = int('BOARD_COLS', 1000, { min: 1, max: 100_000 });
-
 const logLevel = str('LOG_LEVEL', isTest ? 'silent' : 'info');
 if (!['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'].includes(logLevel)) {
   errors.push(`LOG_LEVEL is not a pino level (got "${logLevel}")`);
@@ -122,8 +119,9 @@ export const config = Object.freeze({
   }),
 
   board: Object.freeze({
-    size: boardSize,
-    cols: boardCols,
+    // fixed by the brief; the client assumes the same
+    size: 1_000_000,
+    cols: 1000,
     broadcastIntervalMs: int('BROADCAST_INTERVAL_MS', 50, { min: 5, max: 5000 }),
     resyncGap: int('RESYNC_GAP', 500, { min: 0 }),
     logLength: int('BOARD_LOG_LENGTH', 10_000, { min: 0 }),

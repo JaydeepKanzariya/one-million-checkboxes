@@ -1,5 +1,6 @@
 import EventEmitter from 'node:events';
 import net from 'node:net';
+import { config } from '../../server/config.js';
 import { BOARD_BYTE_LENGTH } from '../../server/redis/board.js';
 import { closeRedis, connectRedis, redis, subscriber } from '../../server/redis/client.js';
 
@@ -98,7 +99,7 @@ export async function setupTestRedis() {
     return {
       mode: 'real',
       async flush() {
-        const keys = await redis.keys('omc*');
+        const keys = await redis.keys(`${config.redisPrefix}:*`);
         if (keys.length > 0) await redis.del(...keys);
       },
       async teardown() {

@@ -153,7 +153,7 @@ export class Broadcaster {
   }
 
   async tickStatsAndPresence() {
-    const localIds = [...this.sockets.keys()];
+    const localIds = Array.from(this.sockets, ([id]) => id);
     const [online, boardStats] = await Promise.all([
       refreshPresenceAndInstance(localIds),
       getBoardStats(),

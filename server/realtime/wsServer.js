@@ -220,7 +220,7 @@ export function createRealtimeServer(httpServer) {
     async stop() {
       clearInterval(heartbeatTimer);
       clearInterval(sessionTimer);
-      const ids = [...sockets.keys()];
+      const ids = Array.from(sockets, ([id]) => id);
       await broadcaster.stop();
       for (const ws of sockets.values()) {
         try {

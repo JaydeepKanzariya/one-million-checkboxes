@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Sequencer } from '../public/js/sequencer.js';
+import { Sequencer } from '../client/src/engine/sequencer.js';
 
 describe('Client Sequencer', () => {
   it('applies in-order updates and advances appliedSeq', () => {

@@ -122,7 +122,9 @@ export class Minimap {
   rebuildBitmap() {
     const styles = getComputedStyle(document.documentElement);
     const paperRgb = parseHexRgb(styles.getPropertyValue('--paper').trim() || '#EDF2EA');
-    const inkRgb = parseHexRgb(styles.getPropertyValue('--ink').trim() || '#1C2740');
+    const inkRgb = parseHexRgb(
+      styles.getPropertyValue('--cell-on').trim() || styles.getPropertyValue('--ink').trim() || '#1C2740',
+    );
     const data = this.imageData.data;
 
     let ptr = 0;

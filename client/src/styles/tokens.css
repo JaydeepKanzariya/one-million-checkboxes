@@ -1,0 +1,62 @@
+/* Synthwave: a night sheet of a million boxes. Dark only.
+   Lit boxes glow hot magenta, your own clicks flash amber, other people's flash cyan.
+   The renderer reads the sheet tokens (--desk, --paper, --box, --cell-on, --glow ...) by name. */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, from the desk behind the sheet up to floating panels */
+  --desk: #07040e;
+  --paper: #0e0819;
+  --paper-elevated: #150c26;
+  --paper-subtle: #1f1335;
+  --rule: #1a1030;
+  --rule-strong: #2c1c46;
+
+  /* Text */
+  --ink: #f3e8ff;
+  --ink-muted: #a99bc4;
+
+  /* The board */
+  --box: #6e5a94; /* empty box outline, about 3.3:1 on --paper */
+  --cell-on: #ff3ea5; /* a checked box */
+  --ink-on-fill: #1a0612; /* check mark inside a lit box */
+  --glow: rgba(255, 62, 165, 0.2);
+  --margin: #22d3ee; /* the sheet's double margin line */
+  --signal: #ffb020; /* your clicks and the focus ring */
+  --live: #22d3ee; /* other people's clicks */
+
+  /* UI accents */
+  --accent: #ff3ea5;
+  --accent-ink: #1a0612;
+  --accent-soft: rgba(255, 62, 165, 0.14);
+  --cyan: #22d3ee;
+  --alert: #ff5470;
+  --online: #22d3ee;
+
+  /* Type */
+  --font-sans: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* Motion */
+  --dur-instant: 80ms;
+  --dur-fast: 120ms;
+  --dur-base: 220ms;
+  --dur-slow: 420ms;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.6, 0, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* Shape and depth: panels float above the sheet with a hairline edge and a soft glow */
+  --header-h: 58px;
+  --footer-h: 42px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --edge: rgba(169, 155, 196, 0.16);
+  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.45), 0 24px 48px rgba(0, 0, 0, 0.35);
+  --shadow-3: 0 2px 4px rgba(0, 0, 0, 0.5), 0 16px 36px rgba(0, 0, 0, 0.5), 0 40px 80px rgba(0, 0, 0, 0.45);
+  --glow-accent: 0 0 0 1px rgba(255, 62, 165, 0.45), 0 0 18px -2px rgba(255, 62, 165, 0.55);
+  --glow-text: 0 0 18px rgba(255, 62, 165, 0.45);
+}

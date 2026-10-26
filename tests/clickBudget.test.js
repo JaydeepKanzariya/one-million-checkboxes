@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClickBudget } from '../public/js/clickBudget.js';
+import { ClickBudget } from '../client/src/engine/clickBudget.js';
 
 describe('ClickBudget (client token bucket)', () => {
   it('allows 10 consumes and fails on the 11th', () => {

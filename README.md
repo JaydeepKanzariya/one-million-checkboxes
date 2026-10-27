@@ -5,9 +5,9 @@ A real-time, multi-user grid of **1,000,000 checkboxes** (`1,000 × 1,000`). Eve
 - **Live Deployment:** `https://<your-production-domain>` *(placeholder — update after deployment)*
 - **YouTube Demo Video:** `https://youtu.be/<your-demo-video-id>` *(placeholder — ~4 min walkthrough)*
 
-<!-- TODO before submitting: save a screenshot as docs/screenshot.png and replace this comment with:
-![One Million Checkboxes — Engineering Ledger UI](./docs/screenshot.png) -->
-- **Screenshot:** *(placeholder — add `docs/screenshot.png` before submitting)*
+![million/boxes landing page](./docs/screenshots/landing-desktop.png)
+
+More screenshots: [grid page](./docs/screenshots/grid-desktop.png) · [grid on a phone](./docs/screenshots/grid-phone.png)
 
 ---
 
@@ -23,7 +23,7 @@ A real-time, multi-user grid of **1,000,000 checkboxes** (`1,000 × 1,000`). Eve
 | Sessions | Custom Redis Hash | Opaque 32-byte `base64url` session ID in an `HttpOnly; SameSite=Lax` cookie |
 | Rate Limiting | Custom (Lua + TokenBucket) | Fixed-window HTTP, IP connection cap, per-socket token bucket, per-user sliding window + strikes |
 | Logging | `pino` | Structured JSON logging with `instance` attribution |
-| Frontend | Vanilla HTML / CSS / ES Modules | Zero framework/bundler overhead; single `<canvas>`, dirty-rect redraws, 200×200 minimap |
+| Frontend | React 19 + Vite 8 | React renders the controls; the board is one `<canvas>` drawn by a framework-free engine (dirty-rect redraws, 200×200 minimap) |
 | Tests | Vitest + Supertest | Unit and integration tests against real Redis (`redis:7-alpine`) |
 | Local Infra | Docker Compose | `redis` (AOF enabled), `app1`, `app2`, and `nginx` load balancer |
 
@@ -36,7 +36,7 @@ A real-time, multi-user grid of **1,000,000 checkboxes** (`1,000 × 1,000`). Eve
 - [x] **1,000,000 checkboxes in 125,000 bytes:** Redis bitmap (`SETBIT`/`GETBIT`) paired with a client-side `Uint8Array(125_000)` MSB-first bitset.
 - [x] **60 fps Canvas Grid + 3 Zoom Levels:**
   - `< 4 px`: full-board 1000×1000 `ImageData` overview rendered in ~2 ms
-  - `4–15 px`: ruled engineering ledger grid with ink fills
+  - `4–15 px`: ruled grid with filled (lit) cells
   - `16–36 px`: individual checkbox outlines, vector checkmarks, and keyboard focus ring
 - [x] **Multi-instance real-time fan-out:** Toggles on `app1` (:3001) appear on `app2` (:3002) and behind `nginx` (:8080) in under 150 ms via Redis Pub/Sub + 50 ms binary batching.
 - [x] **Strict client sequencer & optimistic overlay:** `Sequencer` applies server updates strictly in `seq` order, buffers out-of-order gaps, triggers snapshot resync on gap timeout, and overlays in-flight optimistic clicks cleanly over authoritative server bits.
@@ -124,16 +124,28 @@ Start a real Redis 7 instance on `127.0.0.1:6379` using any of the following on 
   winget install Memurai.MemuraiDeveloper
   ```
 
-Then install dependencies, seed the board, and start the server:
+Then install dependencies, build the web client, seed the board, and start the server:
 
 ```bash
 cp .env.example .env
 npm install
+npm run build      # builds the React client into client/dist, which Express serves
 npm run seed
 npm run dev
 ```
 
 Open `http://localhost:3000` (or run `npm run dev:multi` to launch `app1` on `:3001` and `app2` on `:3002`).
+
+### Working on the web client (React + Vite)
+
+The browser client is a React app in [client/](client/), built with Vite. React renders the header, toolbar, map, footer and dialogs; the board itself is still one `<canvas>` drawn by the engine in [client/src/engine/](client/src/engine/) (renderer, sequencer, socket, protocol), which React never re-renders.
+
+```bash
+npm run dev:multi    # terminal 1: app1 on :3001 and app2 on :3002
+npm run dev:client   # terminal 2: Vite on http://localhost:5173 with hot reload
+```
+
+Vite proxies `/api`, `/auth` and the `/ws` WebSocket to `app1` (set `OMC_BACKEND=http://localhost:3002` to point it at `app2`). Run `npm run build` before `npm start` or `docker compose up`, so Express has a fresh `client/dist` to serve; the Docker image builds it automatically.
 
 ---
 
@@ -308,7 +320,7 @@ All rate limiting is written from scratch across three layers, ordered from chea
 
 ## 10. Scaling Notes & Known Limits
 
-1. **Client Sequencer & Gap Detection:** Out-of-order batches or async reconnect replays are ordered by `public/js/sequencer.js`. If a sequence gap remains unfilled for > 2,000 ms (or exceeds 20,000 buffered items), the client automatically refetches `GET /api/board`.
+1. **Client Sequencer & Gap Detection:** Out-of-order batches or async reconnect replays are ordered by `client/src/engine/sequencer.js`. If a sequence gap remains unfilled for > 2,000 ms (or exceeds 20,000 buffered items), the client automatically refetches `GET /api/board`.
 2. **Slow Consumers:** In `broadcaster.js`, any WebSocket whose outgoing `bufferedAmount` reaches `1 MB` is terminated (`ws.terminate()`) with a warning log rather than silently dropping batches. Upon reconnecting, the client replays from `sequencer.appliedSeq` or refetches the snapshot.
 3. **Pub/Sub Delivery Gap Mitigation:** Redis Pub/Sub is fire-and-forget. `toggle.lua` writes every mutation to a capped Redis Stream (`omc:board:log`, `MAXLEN ~ 10000`) for small reconnect gaps (`<= 500`), and if an instance's Redis subscriber connection drops and reconnects, it broadcasts `{"t":"resync"}` to all local clients.
 4. **Sharding Path Beyond Single-Instance Redis:** A single Redis bitmap handles > 20,000 toggles/s. To scale further across a Redis Cluster, shard the bitmap into 16 keys (`omc:board:0..15` by `index >> 16`) with per-shard sequence numbers.
@@ -378,27 +390,40 @@ one-million-checkboxes/
 │     ├─ clientIp.js           # right-to-left X-Forwarded-For hop extraction
 │     ├─ cookies.js
 │     └─ errors.js             # AppError + central errorHandler
-├─ public/
+├─ client/                     # React + Vite web client (built into client/dist)
 │  ├─ index.html
-│  ├─ styles/
-│  │  ├─ tokens.css            # engineering ledger palette, typography, dark mode
-│  │  └─ app.css               # layout, toolbar, minimap, toasts, responsive rules
-│  └─ js/
-│     ├─ main.js               # boot sequence, optimistic overlay, sequencer wiring
-│     ├─ sequencer.js          # strict seq ordering, gap buffering & timeout resync
-│     ├─ bitset.js             # 125 KB Uint8Array MSB-first bitset + popcount
-│     ├─ api.js                # fetch /api/me, /api/board (cache: no-cache)
-│     ├─ socket.js             # WebSocket client, backoff reconnect, heartbeat
-│     ├─ protocol.js           # browser binary protocol (matches server/realtime/protocol.js)
-│     ├─ renderer.js           # canvas, 3 zoom tiers, dirty rects, live pulse
-│     ├─ input.js              # pointer pan/click, wheel, pinch-to-zoom, keyboard a11y
-│     ├─ minimap.js            # 200×200 downsample + draggable viewport box
-│     └─ ui.js                 # header counters, status bar, toasts, auth dialog
+│  ├─ vite.config.js           # dev server on :5173, proxies /api, /auth and /ws
+│  └─ src/
+│     ├─ main.jsx              # creates and starts the one board engine, renders <App>
+│     ├─ App.jsx               # picks the page for the current route
+│     ├─ router.js             # tiny History API router: / (landing) and /grid
+│     ├─ useEngine.js          # React hooks over the engine store
+│     ├─ pages/
+│     │  ├─ Landing.jsx        # hero, live terminal feed, stats ticker, feature + architecture cards
+│     │  └─ GridPage.jsx       # board panel, live stats, write budget, connections, broadcast feed
+│     ├─ components/           # Header, Toolbar, MapPanel, Overlays, SignInDialog, icons
+│     ├─ styles/
+│     │  ├─ tokens.css         # green terminal palette, type, motion
+│     │  └─ app.css            # page and component styles, responsive rules
+│     └─ engine/               # framework-free board engine (React never re-renders the canvas)
+│        ├─ boardEngine.js     # start(), attachBoard(), optimistic overlay, sequencer wiring, store
+│        ├─ store.js           # tiny external store for useSyncExternalStore
+│        ├─ sequencer.js       # strict seq ordering, gap buffering & timeout resync
+│        ├─ bitset.js          # 125 KB Uint8Array MSB-first bitset + popcount
+│        ├─ api.js             # fetch /api/me, /api/board (cache: no-cache)
+│        ├─ socket.js          # WebSocket client, backoff reconnect, heartbeat
+│        ├─ protocol.js        # browser binary protocol (matches server/realtime/protocol.js)
+│        ├─ renderer.js        # canvas, 3 zoom tiers, dirty rects, live pulse, glow
+│        ├─ input.js           # pointer pan/click, wheel, pinch-to-zoom, keyboard a11y
+│        ├─ minimap.js         # 200×200 downsample + draggable viewport box
+│        ├─ clickBudget.js     # client mirror of the server token bucket
+│        └─ motion.js          # shared durations and easing
 ├─ tests/
 │  ├─ helpers/
 │  │  ─ redisHarness.js       # real Redis test connection + isolated omctest:* flush
 │  ├─ protocol.test.js
 │  ├─ sequencer.test.js
+│  ├─ clickBudget.test.js
 │  ├─ clientIp.test.js
 │  ├─ tokenBucket.test.js
 │  ├─ wsLimiter.test.js
@@ -417,7 +442,10 @@ one-million-checkboxes/
 ├─ .env.example
 ├─ .gitignore
 ├─ package.json
-├─ PROJECT.md
-├─ FIXES.md
+├─ docs/
+│  ├─ screenshots/             # current UI (landing, grid, phone)
+│  └─ archive/                 # completed work specs: FIXES.md, DESIGN.md, UI_MATCH_SPEC.md
+├─ PROJECT.md                  # original build plan
+├─ CHANGES.md                  # log of review fixes and UI work
 └─ README.md
 ```

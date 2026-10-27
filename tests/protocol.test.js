@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import * as clientProto from '../public/js/protocol.js';
-import { BitSet } from '../public/js/bitset.js';
+import * as clientProto from '../client/src/engine/protocol.js';
+import { BitSet } from '../client/src/engine/bitset.js';
 import * as serverProto from '../server/realtime/protocol.js';
 
 describe('WebSocket binary + JSON protocol', () => {

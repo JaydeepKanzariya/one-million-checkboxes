@@ -88,7 +88,11 @@ export class BoardRenderer {
     const rule = styles.getPropertyValue('--rule').trim() || '#C9D8C4';
     const ruleStrong = styles.getPropertyValue('--rule-strong').trim() || '#A9BFA3';
     const box = styles.getPropertyValue('--box').trim() || '#6F8C78';
-    const ink = styles.getPropertyValue('--ink').trim() || '#1C2740';
+    // Checked boxes use --cell-on when a theme separates it from text ink (e.g. a neon accent).
+    const ink =
+      styles.getPropertyValue('--cell-on').trim() || styles.getPropertyValue('--ink').trim() || '#1C2740';
+    // Optional halo drawn behind lit boxes; empty means no glow.
+    const glow = styles.getPropertyValue('--glow').trim() || null;
     const inkMuted = styles.getPropertyValue('--ink-muted').trim() || '#4F5F55';
     const inkOnFill = styles.getPropertyValue('--ink-on-fill').trim() || '#F6F9F4';
     const margin = styles.getPropertyValue('--margin').trim() || '#C0392B';
@@ -112,6 +116,7 @@ export class BoardRenderer {
       margin,
       signal,
       live,
+      glow,
       isDark,
       shadowColor: isDark ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.12)',
       paperRgb,
@@ -584,7 +589,7 @@ export class BoardRenderer {
     const startRow = Math.ceil(bounds.rowStart / step) * step;
 
     ctx.fillStyle = this.palette.inkMuted;
-    ctx.font = '450 11px "Bricolage Grotesque", system-ui, sans-serif';
+    ctx.font = '400 11px "JetBrains Mono", ui-monospace, Menlo, monospace';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
 
@@ -761,6 +766,15 @@ export class BoardRenderer {
       const radius = Math.min(3, cs * 0.12);
 
       if (fillColor) {
+        if (this.palette.glow) {
+          // Two translucent rings stay inside the cell padding, so dirty-cell redraws clear them.
+          const g = Math.min(pad - 1, Math.max(2, Math.round(cs * 0.08)));
+          ctx.fillStyle = this.palette.glow;
+          roundedBoxPath(ctx, boxX - g, boxY - g, boxS + g * 2, boxS + g * 2, radius + g);
+          ctx.fill();
+          roundedBoxPath(ctx, boxX - g / 2, boxY - g / 2, boxS + g, boxS + g, radius + g / 2);
+          ctx.fill();
+        }
         ctx.fillStyle = fillColor;
         roundedBoxPath(ctx, boxX, boxY, boxS, boxS, radius);
         ctx.fill();

@@ -5,9 +5,9 @@ A real-time, multi-user grid of **1,000,000 checkboxes** (`1,000 × 1,000`). Eve
 - **Live Deployment:** `https://<your-production-domain>` *(placeholder — update after deployment)*
 - **YouTube Demo Video:** `https://youtu.be/<your-demo-video-id>` *(placeholder — ~4 min walkthrough)*
 
-<!-- TODO before submitting: save a screenshot as docs/screenshot.png and replace this comment with:
-![One Million Checkboxes — Engineering Ledger UI](./docs/screenshot.png) -->
-- **Screenshot:** *(placeholder — add `docs/screenshot.png` before submitting)*
+![million/boxes landing page](./docs/screenshots/landing-desktop.png)
+
+More screenshots: [grid page](./docs/screenshots/grid-desktop.png) · [grid on a phone](./docs/screenshots/grid-phone.png)
 
 ---
 
@@ -36,7 +36,7 @@ A real-time, multi-user grid of **1,000,000 checkboxes** (`1,000 × 1,000`). Eve
 - [x] **1,000,000 checkboxes in 125,000 bytes:** Redis bitmap (`SETBIT`/`GETBIT`) paired with a client-side `Uint8Array(125_000)` MSB-first bitset.
 - [x] **60 fps Canvas Grid + 3 Zoom Levels:**
   - `< 4 px`: full-board 1000×1000 `ImageData` overview rendered in ~2 ms
-  - `4–15 px`: ruled engineering ledger grid with ink fills
+  - `4–15 px`: ruled grid with filled (lit) cells
   - `16–36 px`: individual checkbox outlines, vector checkmarks, and keyboard focus ring
 - [x] **Multi-instance real-time fan-out:** Toggles on `app1` (:3001) appear on `app2` (:3002) and behind `nginx` (:8080) in under 150 ms via Redis Pub/Sub + 50 ms binary batching.
 - [x] **Strict client sequencer & optimistic overlay:** `Sequencer` applies server updates strictly in `seq` order, buffers out-of-order gaps, triggers snapshot resync on gap timeout, and overlays in-flight optimistic clicks cleanly over authoritative server bits.
@@ -394,15 +394,19 @@ one-million-checkboxes/
 │  ├─ index.html
 │  ├─ vite.config.js           # dev server on :5173, proxies /api, /auth and /ws
 │  └─ src/
-│     ├─ main.jsx              # creates the one board engine, renders <App>
-│     ├─ App.jsx               # layout: header, canvas stage, toolbar, map, footer
+│     ├─ main.jsx              # creates and starts the one board engine, renders <App>
+│     ├─ App.jsx               # picks the page for the current route
+│     ├─ router.js             # tiny History API router: / (landing) and /grid
 │     ├─ useEngine.js          # React hooks over the engine store
-│     ├─ components/           # Header, Toolbar, MapPanel, Footer, Overlays, MobileSheet, SignInDialog
+│     ├─ pages/
+│     │  ├─ Landing.jsx        # hero, live terminal feed, stats ticker, feature + architecture cards
+│     │  └─ GridPage.jsx       # board panel, live stats, write budget, connections, broadcast feed
+│     ├─ components/           # Header, Toolbar, MapPanel, Overlays, SignInDialog, icons
 │     ├─ styles/
-│     │  ├─ tokens.css         # Synthwave palette, type, motion, depth
-│     │  └─ app.css            # component styles, scanlines, responsive rules
+│     │  ├─ tokens.css         # green terminal palette, type, motion
+│     │  └─ app.css            # page and component styles, responsive rules
 │     └─ engine/               # framework-free board engine (React never re-renders the canvas)
-│        ├─ boardEngine.js     # boot sequence, optimistic overlay, sequencer wiring, store
+│        ├─ boardEngine.js     # start(), attachBoard(), optimistic overlay, sequencer wiring, store
 │        ├─ store.js           # tiny external store for useSyncExternalStore
 │        ├─ sequencer.js       # strict seq ordering, gap buffering & timeout resync
 │        ├─ bitset.js          # 125 KB Uint8Array MSB-first bitset + popcount
@@ -419,6 +423,7 @@ one-million-checkboxes/
 │  │  ─ redisHarness.js       # real Redis test connection + isolated omctest:* flush
 │  ├─ protocol.test.js
 │  ├─ sequencer.test.js
+│  ├─ clickBudget.test.js
 │  ├─ clientIp.test.js
 │  ├─ tokenBucket.test.js
 │  ├─ wsLimiter.test.js
@@ -437,7 +442,10 @@ one-million-checkboxes/
 ├─ .env.example
 ├─ .gitignore
 ├─ package.json
-├─ PROJECT.md
-├─ FIXES.md
+├─ docs/
+│  ├─ screenshots/             # current UI (landing, grid, phone)
+│  └─ archive/                 # completed work specs: FIXES.md, DESIGN.md, UI_MATCH_SPEC.md
+├─ PROJECT.md                  # original build plan
+├─ CHANGES.md                  # log of review fixes and UI work
 └─ README.md
 ```

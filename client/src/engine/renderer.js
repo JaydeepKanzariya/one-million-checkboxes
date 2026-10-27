@@ -589,7 +589,7 @@ export class BoardRenderer {
     const startRow = Math.ceil(bounds.rowStart / step) * step;
 
     ctx.fillStyle = this.palette.inkMuted;
-    ctx.font = '450 11px "Bricolage Grotesque", system-ui, sans-serif';
+    ctx.font = '400 11px "JetBrains Mono", ui-monospace, Menlo, monospace';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
 

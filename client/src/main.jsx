@@ -8,6 +8,7 @@ import './styles/app.css';
 // One engine per page: it owns the socket and the canvases, so it lives outside React.
 // No StrictMode: its double-mount in development would open and close the socket twice.
 const engine = createBoardEngine();
+engine.start();
 
 createRoot(document.getElementById('root')).render(
   <EngineContext.Provider value={engine}>

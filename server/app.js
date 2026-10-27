@@ -65,9 +65,13 @@ export function createApp() {
       express.static(path.join(clientDir, 'assets'), { immutable: true, maxAge: config.isProd ? '1y' : 0 }),
     );
     app.use(express.static(clientDir, { etag: true, maxAge: 0 }));
+    app.get('/grid', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(path.join(clientDir, 'index.html'));
+    });
   } else if (!config.isTest) {
     logger.warn('client/dist not found: run `npm run build`, or `npm run dev:client` for development');
-    app.get('/', (_req, res) => {
+    app.get(['/', '/grid'], (_req, res) => {
       res
         .status(503)
         .type('text/plain')
@@ -80,4 +84,3 @@ export function createApp() {
 
   return app;
 }
-

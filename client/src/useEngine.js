@@ -16,7 +16,6 @@ export function useBoard(selector) {
 // Dev login opens a name dialog; otherwise go straight to the OIDC provider.
 export function openSignIn(engine) {
   const { auth } = engine.store.get();
-  engine.store.set({ menuOpen: false });
   if (auth.devLoginEnabled) {
     engine.store.set({ signInOpen: true });
     return;

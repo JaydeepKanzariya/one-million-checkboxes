@@ -1,41 +1,55 @@
-/* Synthwave: a night sheet of a million boxes. Dark only.
-   Lit boxes glow hot magenta, your own clicks flash amber, other people's flash cyan.
-   The renderer reads the sheet tokens (--desk, --paper, --box, --cell-on, --glow ...) by name. */
+/* Green phosphor-terminal palette ("million/boxes" look).
+   Keeps all variable names read by BoardRenderer and Minimap. */
 :root {
   color-scheme: dark;
 
-  /* Surfaces, from the desk behind the sheet up to floating panels */
-  --desk: #07040e;
-  --paper: #0e0819;
-  --paper-elevated: #150c26;
-  --paper-subtle: #1f1335;
-  --rule: #1a1030;
-  --rule-strong: #2c1c46;
+  /* Surfaces */
+  --bg: #060c08;
+  --desk: #060c08;
+  --paper: #0a110c;
+  --card: #0d1410;
+  --paper-elevated: #0d1410;
+  --paper-subtle: #161d19;
+
+  /* Rules and borders */
+  --border: #28342c;
+  --rule-strong: #28342c;
+  --rule: #141c17;
+  --box: #2f3d34;
 
   /* Text */
-  --ink: #f3e8ff;
-  --ink-muted: #a99bc4;
+  --ink: #dfece1;
+  --ink-muted: #8b9e8f;
 
-  /* The board */
-  --box: #6e5a94; /* empty box outline, about 3.3:1 on --paper */
-  --cell-on: #ff3ea5; /* a checked box */
-  --ink-on-fill: #1a0612; /* check mark inside a lit box */
-  --glow: rgba(255, 62, 165, 0.2);
-  --margin: #22d3ee; /* the sheet's double margin line */
-  --signal: #ffb020; /* your clicks and the focus ring */
-  --live: #22d3ee; /* other people's clicks */
+  /* Accents and board states */
+  --primary: #62eb80;
+  --cell-on: #62eb80;
+  --primary-ink: #031108;
+  --ink-on-fill: #031108;
+  --primary-soft: rgba(98, 235, 128, 0.12);
+  --glow: rgba(98, 235, 128, 0.18);
+  --ring: #3b9555;
+  --signal: #eab532;
+  --live: #62eb80;
+  --margin: #28342c;
+  --alert: #f54748;
+  --online: #62eb80;
 
-  /* UI accents */
-  --accent: #ff3ea5;
-  --accent-ink: #1a0612;
-  --accent-soft: rgba(255, 62, 165, 0.14);
-  --cyan: #22d3ee;
-  --alert: #ff5470;
-  --online: #22d3ee;
+  /* Terminal window dots */
+  --dot-red: #e5484d;
+  --dot-amber: #eab532;
+  --dot-green: #46c463;
 
-  /* Type */
-  --font-sans: 'Bricolage Grotesque', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  /* Legacy aliases for shared dialogs/popovers */
+  --accent: #62eb80;
+  --accent-ink: #031108;
+  --accent-soft: rgba(98, 235, 128, 0.12);
+  --cyan: #62eb80;
+  --edge: rgba(40, 52, 44, 0.7);
+
+  /* Typography */
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, Menlo, monospace;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   /* Motion */
   --dur-instant: 80ms;
@@ -46,17 +60,12 @@
   --ease-in-out: cubic-bezier(0.6, 0, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
-  /* Shape and depth: panels float above the sheet with a hairline edge and a soft glow */
-  --header-h: 58px;
-  --footer-h: 42px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --edge: rgba(169, 155, 196, 0.16);
-  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.45), 0 24px 48px rgba(0, 0, 0, 0.35);
-  --shadow-3: 0 2px 4px rgba(0, 0, 0, 0.5), 0 16px 36px rgba(0, 0, 0, 0.5), 0 40px 80px rgba(0, 0, 0, 0.45);
-  --glow-accent: 0 0 0 1px rgba(255, 62, 165, 0.45), 0 0 18px -2px rgba(255, 62, 165, 0.55);
-  --glow-text: 0 0 18px rgba(255, 62, 165, 0.45);
+  /* Radii & layout */
+  --header-h: 57px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-pill: 999px;
+  --glow-primary: 0 0 24px -4px rgba(98, 235, 128, 0.6);
+  --glow-text: 0 0 24px rgba(98, 235, 128, 0.35);
 }

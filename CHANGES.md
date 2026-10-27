@@ -1,6 +1,8 @@
 # Review Fixes & Redesign Changelog (`CHANGES.md`)
 
-All items from [FIXES.md](./FIXES.md) have been implemented in order with individual git commits per fix ID:
+> **Paths:** the F, R and D entries were made on the vanilla client, so they link to `public/js/…` and `public/styles/…`. Those files still exist on `main`. On the React branches, the same engine modules live in [`client/src/engine/`](./client/src/engine/) and the UI was rebuilt as React components. The specs referenced here are in [`docs/archive/`](./docs/archive/).
+
+All items from [FIXES.md](./docs/archive/FIXES.md) have been implemented in order with individual git commits per fix ID:
 
 | ID | Status | Commit Summary & Details |
 |---|---|---|
@@ -32,7 +34,7 @@ All items from [FIXES.md](./FIXES.md) have been implemented in order with indivi
 | **R5** | **Open** | Integration tests (`board`, `wsLimiter`, `api`) still need to run against a real Redis. Deploy with a separate production env file, not the local `.env` (which has `DEV_LOGIN=true`). |
 
 
-## Design (`DESIGN.md` D1–D11)
+## Design ([`DESIGN.md`](./docs/archive/DESIGN.md) D1–D11)
 
 | ID | Status | Summary & Details |
 |---|---|---|
@@ -47,3 +49,16 @@ All items from [FIXES.md](./FIXES.md) have been implemented in order with indivi
 | **D9** | **Done** | Added remote update blips (ring buffer of 300 3px `--live` dots fading over 1.5s on the overlay pass) in [public/js/minimap.js](./public/js/minimap.js) and the `Find activity` control in [public/js/main.js](./public/js/main.js) (bucketing the last 60s of remote updates into 50×50 cell blocks and animating to the busiest block). |
 | **D10** | **Done** | Added the dismissible first-visit hint card (`omc:hintSeen` in `localStorage` wrapped in `try/catch`) with pointer-appropriate copy in [public/index.html](./public/index.html) and [public/js/ui.js](./public/js/ui.js). |
 | **D11** | **Done** | Applied all exact copy strings from the D11 wording table across [public/index.html](./public/index.html), [public/js/ui.js](./public/js/ui.js), and [public/js/main.js](./public/js/main.js). |
+
+
+
+## UI match ([`UI_MATCH_SPEC.md`](./docs/archive/UI_MATCH_SPEC.md) U1–U6)
+
+| ID | Status | Summary & Details |
+|---|---|---|
+| **U1** | **Done** | Replaced [client/src/styles/tokens.css](./client/src/styles/tokens.css) with the green phosphor-terminal palette (`--bg`/`--desk: #060c08`, `--paper: #0a110c`, `--card`/`--paper-elevated: #0d1410`, `--paper-subtle: #161d19`, `--border`/`--rule-strong: #28342c`, `--rule: #141c17`, `--box: #2f3d34`, `--ink: #dfece1`, `--ink-muted: #8b9e8f`, `--primary`/`--cell-on: #62eb80`, `--primary-ink`/`--ink-on-fill: #031108`, `--primary-soft`, `--glow`, `--ring: #3b9555`, `--signal: #eab532`, `--live: #62eb80`, `--margin: #28342c`, `--alert: #f54748`, terminal dots) and removed Bricolage Grotesque from [client/index.html](./client/index.html). |
+| **U2** | **Done** | Rewrote [client/src/styles/app.css](./client/src/styles/app.css) with the measured 1104px layout, 57px sticky header, monospace uppercase labels, `//` green eyebrows, 32px grid-paper background, radial hero glow, `● LIVE` pill, 40s infinite ticker, scroll-reveal transitions, two-column `/grid` dashboard layout, and full `prefers-reduced-motion` overrides. |
+| **U3** | **Done** | Updated [client/src/engine/boardEngine.js](./client/src/engine/boardEngine.js) and [client/src/main.jsx](./client/src/main.jsx) to split `mount` into idempotent `start()` (socket, `/api/me`, `/api/stats`, snapshot, timers) and repeatable `attachBoard(canvas, minimapCanvas)` with null-guarded `renderer`/`minimap` calls, first-board-attach opening zoom, and `writes` (`seq`) + privacy-safe `feed` (last 12 `{ index, value, at, mine }`, never storing names or emails) in the store. |
+| **U4** | **Done** | Created [client/src/pages/Landing.jsx](./client/src/pages/Landing.jsx) (`/`) with the sticky nav, cohort badge pill, 60px mono `one million checkboxes_` hero with blinking cursor, live `GRID-BROADCAST --FOLLOW` terminal card fed from `store.feed`, infinite scrolling metrics ticker, 6 engineering feature cards, 3 architecture cards (`01 BROWSER`, `02 SERVER`, `03 REDIS`), live `{1,000,000 - checked} boxes still dark` closing CTA card, and footer. |
+| **U5** | **Done** | Created [client/src/pages/GridPage.jsx](./client/src/pages/GridPage.jsx) (`/grid`) with the `LIVE GRID · 1000 × 1000` header, `Go` + `Random` jump toolbar, signed-out read-only banner, bordered board panel (`ResizeObserver` + existing `Toolbar`, `MapPanel`, `HintCard`, `Toast`, `Announcer`), and 320px sidebar (`LIVE SIGNAL` 2×2 stat tiles, `YOUR WRITE BUDGET` dual rAF bars for burst and 1s user window, privacy-safe `CONNECTIONS`, and clickable `BROADCAST FEED`). |
+| **U6** | **Done** | Created [client/src/router.js](./client/src/router.js) (`navigate`, `useRoute`, `popstate` listener, `/#523417` → `/grid#523417` redirect), updated [client/src/App.jsx](./client/src/App.jsx) to switch between `Landing` (`/`) and `GridPage` (`/grid`), and added the `GET /grid` SPA fallback in [server/app.js](./server/app.js). |

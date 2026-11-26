@@ -426,7 +426,7 @@ one-million-checkboxes/
 │        └─ motion.js          # shared durations and easing
 ├─ tests/
 │  ├─ helpers/
-│  │  ─ redisHarness.js       # real Redis test connection + isolated omctest:* flush
+│  │  └─ redisHarness.js       # real Redis test connection + isolated omctest:* flush
 │  ├─ protocol.test.js
 │  ├─ sequencer.test.js
 │  ├─ clickBudget.test.js

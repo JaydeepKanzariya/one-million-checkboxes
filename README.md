@@ -2,7 +2,7 @@
 
 A real-time, multi-user grid of **1,000,000 checkboxes** (`1,000 × 1,000`). Every toggle is stored atomically in a 125 KB Redis bitmap via Lua, fanned out across stateless server instances with Redis Pub/Sub, batched into compact binary frames every 50 ms, and pushed to every connected browser over raw WebSockets. Authentication uses **OIDC Authorization Code + PKCE**, and three-layer rate limiting is built from scratch on Redis and in-memory token buckets.
 
-- **Live Deployment:** `https://<your-production-domain>` *(placeholder — update after deployment)*
+- **Live Deployment:** [https://one-million-checkboxes-jk.onrender.com](https://one-million-checkboxes-jk.onrender.com/) *(free tier: the first visit after ~15 minutes idle can take up to a minute to wake up)*
 - **YouTube Demo Video:** `https://youtu.be/<your-demo-video-id>` *(placeholder — ~4 min walkthrough)*
 
 ![million/boxes landing page](./docs/screenshots/landing-desktop.png)
@@ -146,6 +146,12 @@ npm run dev:client   # terminal 2: Vite on http://localhost:5173 with hot reload
 ```
 
 Vite proxies `/api`, `/auth` and the `/ws` WebSocket to `app1` (set `OMC_BACKEND=http://localhost:3002` to point it at `app2`). Run `npm run build` before `npm start` or `docker compose up`, so Express has a fresh `client/dist` to serve; the Docker image builds it automatically.
+
+### Deploying
+
+The live site runs on **Render** (free Docker web service, Singapore) with **Redis Cloud** (free, 30 MB) as the data store. Config lives in [render.yaml](render.yaml); set `REDIS_URL`, `PUBLIC_URL`, `ALLOWED_ORIGINS`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` in the Render dashboard, and add `<PUBLIC_URL>/auth/callback` as an authorized redirect URI in your OIDC provider. Pushes to `main` redeploy automatically.
+
+To self-host on a VM instead (for example Oracle Cloud Always Free), use [docker-compose.prod.yml](docker-compose.prod.yml) with Caddy for automatic HTTPS. Step-by-step guide: [deploy/ORACLE.md](deploy/ORACLE.md). A template for the production `.env` is in [.env.production.example](.env.production.example).
 
 ---
 
@@ -434,12 +440,17 @@ one-million-checkboxes/
 │  ├─ loadtest.js              # N sockets × M toggles/s load & cross-instance verifier
 │  └─ seed.js                  # board pattern seeder
 ├─ deploy/
-│  └─ nginx.conf               # round-robin upstream app1/app2 + WebSocket upgrade
+│  ├─ nginx.conf               # local round-robin upstream app1/app2 + WebSocket upgrade
+│  ├─ Caddyfile                # production proxy: automatic HTTPS + load balancing
+│  └─ ORACLE.md                # step-by-step Oracle Cloud Always Free deploy guide
 ├─ docker-compose.yml          # production-safe base compose (DEV_LOGIN=false)
 ├─ docker-compose.override.yml # local dev overrides (DEV_LOGIN=true, 127.0.0.1:3001/3002)
+├─ docker-compose.prod.yml     # production overlay: Caddy instead of nginx, Redis internal-only
+├─ render.yaml                 # Render Blueprint (free Docker web service + external Redis)
 ├─ Dockerfile
 ├─ vitest.config.js            # fileParallelism: false, REDIS_PREFIX=omctest
 ├─ .env.example
+├─ .env.production.example     # template for the production .env on a server
 ├─ .gitignore
 ├─ package.json
 ├─ docs/

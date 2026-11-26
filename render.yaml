@@ -1,7 +1,7 @@
 # Render Blueprint: one free Docker web service. Redis is external (Redis Cloud free).
 services:
   - type: web
-    name: one-million-checkboxes
+    name: one-million-checkboxes-jk
     runtime: docker
     plan: free
     region: singapore

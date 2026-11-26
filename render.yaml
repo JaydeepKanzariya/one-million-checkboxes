@@ -1,0 +1,35 @@
+# Render Blueprint: one free Docker web service. Redis is external (Redis Cloud free).
+services:
+  - type: web
+    name: one-million-checkboxes
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: INSTANCE_ID
+        value: render1
+      - key: TRUST_PROXY
+        value: "1"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: DEV_LOGIN
+        value: "false"
+      - key: OIDC_ISSUER
+        value: https://accounts.google.com
+      # Set these in the Render dashboard (marked sync:false = prompted on first deploy).
+      - key: REDIS_URL
+        sync: false
+      - key: PUBLIC_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: OIDC_CLIENT_ID
+        sync: false
+      - key: OIDC_CLIENT_SECRET
+        sync: false

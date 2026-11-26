@@ -1,0 +1,14 @@
+# Production reverse proxy: automatic HTTPS (Let's Encrypt) + round-robin to app1/app2.
+# WebSocket upgrades are handled automatically by Caddy.
+{$DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy app1:3000 app2:3000 {
+		lb_policy round_robin
+		health_uri /healthz
+		health_interval 10s
+		# Keep long-lived WebSocket connections open.
+		stream_timeout 24h
+		stream_close_delay 5s
+	}
+}
